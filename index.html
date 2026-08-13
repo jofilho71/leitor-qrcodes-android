@@ -267,22 +267,22 @@
 <body>
 
 <header>
-  <p class="eyebrow">Leitor de QR Codes · offline no aparelho</p>
-  <h1>Leitura de etiquetas em lote</h1>
-  <p class="sub">Selecione várias fotos da galeria ou use a câmera ao vivo. Cada QR code é decodificado no próprio celular — nada é enviado para a internet.</p>
+  <p class="eyebrow">Leitor de QR Codes - Polo 24</p>
+  <h1>(100% offline)</h1>
+  <p class="sub">Selecione imagens da galeria ou use a câmera.</p>
 </header>
 
 <main>
   <div class="modos" id="modos">
-    <button class="tab ativa" id="tab-galeria" data-modo="galeria">Fotos da galeria</button>
-    <button class="tab" id="tab-camera" data-modo="camera">Câmera ao vivo</button>
+    <button class="tab ativa" id="tab-galeria" data-modo="galeria">Galeria</button>
+    <button class="tab" id="tab-camera" data-modo="camera">Câmera</button>
   </div>
 
   <div class="modo-painel" id="modo-galeria">
     <div class="picker" id="picker">
       <label class="picker-label" for="input-fotos">Selecionar fotos</label>
       <input type="file" id="input-fotos" accept="image/*" multiple>
-      <div class="picker-hint">Toque para escolher uma ou várias imagens da galeria</div>
+      <div class="picker-hint">Toque para escolher imagens da galeria</div>
     </div>
   </div>
 
@@ -291,7 +291,7 @@
       <div class="camera-viewport">
         <video id="video" playsinline muted></video>
         <div class="mira" id="mira"></div>
-        <div class="sem-camera" id="sem-camera">A câmera aparece aqui depois de iniciada</div>
+        <div class="sem-camera" id="sem-camera">Área de captura</div>
       </div>
       <div class="camera-status" id="camera-status">Toque em "Iniciar câmera" e aponte para o QR code</div>
       <div class="camera-acoes">
