@@ -27,7 +27,7 @@
     -webkit-tap-highlight-color: transparent;
   }
   body { padding-bottom: 16px; }
-  body.camera-ativa { display: flex; flex-direction: column; min-height: 100dvh; min-height: 100vh; padding-bottom: 0; }
+  body.camera-ativa { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; padding-bottom: 0; }
   body.camera-ativa main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   body.camera-ativa .status-bar,
   body.camera-ativa .pendencia { flex: none; }
@@ -89,7 +89,7 @@
     display: none; margin-top: 8px; border-radius: 12px; overflow: hidden;
     background: #000; position: relative; aspect-ratio: 4 / 3; min-height: 160px;
   }
-  body.camera-ativa .camera-wrap { flex: 1; aspect-ratio: auto; }
+  body.camera-ativa .camera-wrap { flex: 1; aspect-ratio: auto; min-height: 0; }
   .camera-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .camera-wrap .moldura {
     position: absolute; inset: 14%; border: 2px solid rgba(232,234,237,.85);
@@ -130,7 +130,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT&amp;BAT (v.4)</span>
+    <span class="titulo-mini">Leitor PAT&amp;BAT (v.5)</span>
     <div class="seg-modo">
       <button type="button" data-modo="bateria" class="ativo">Bateria</button>
       <button type="button" data-modo="inventario">Inventário</button>
@@ -250,9 +250,9 @@
 
   // pareamento QR <-> código de barras (PAT_UE) — só no modo Bateria
   // única ordem aceita é QR -> CB; um CB sem QR pendente nunca vira pendência (ver CLAUDE.md)
+  // não há mais gravação automática por timeout: um QR sem CB só vira registro
+  // "sozinho" quando o usuário interrompe a câmera (ver pararCamera)
   let pendente = { qr: null };
-  let timerPendente = null;
-  const JANELA_PAREAMENTO_MS = window.__JANELA_PAREAMENTO_MS_OVERRIDE || 20000;
 
   // estado visual (cor da borda da câmera + caixa de status): branco/amarelo/verde
   const TEXTOS_ESTADO = {
@@ -346,20 +346,7 @@
 
   function limparPendencia() {
     pendente = { qr: null };
-    if (timerPendente) { clearTimeout(timerPendente); timerPendente = null; }
     atualizarEstadoVisual();
-  }
-
-  function agendarExpiracaoPendencia() {
-    if (timerPendente) clearTimeout(timerPendente);
-    timerPendente = setTimeout(() => {
-      if (pendente.qr) {
-        registrar({ origem: pendente.qr.origem, ok: true, bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: "" });
-        pendente = { qr: null };
-        timerPendente = null;
-        mostrarParIncluido(true);
-      }
-    }, JANELA_PAREAMENTO_MS);
   }
 
   // ---------- roteamento por modo de cada código detectado ----------
@@ -394,7 +381,6 @@
 
     if (tipo === "qr") {
       pendente.qr = { bruto: codigo.rawValue, campos: parsearCampos(codigo.rawValue), origem };
-      agendarExpiracaoPendencia();
       piscarMoldura("parcial");
       atualizarEstadoVisual();
       return;
@@ -404,7 +390,6 @@
     // colado na etiqueta da bateria (não é o PAT_UE da urna) — ignora em silêncio
     if (pendente.qr.campos && codigo.rawValue === pendente.qr.campos.CDJE) return;
 
-    if (timerPendente) { clearTimeout(timerPendente); timerPendente = null; }
     registrar({
       origem: pendente.qr.origem, ok: true,
       bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: codigo.rawValue
@@ -611,6 +596,7 @@
   }
 
   function pararCamera() {
+    const estavaAtiva = !!streamAtivo;
     if (intervaloId) clearInterval(intervaloId);
     intervaloId = null;
     if (streamAtivo) { streamAtivo.getTracks().forEach(t => t.stop()); streamAtivo = null; }
@@ -621,6 +607,15 @@
     iconeCamera.innerHTML = ICONE_CAMERA;
     btnGaleria.style.opacity = "";
     btnGaleria.style.pointerEvents = "";
+
+    // interromper a câmera com um QR pendente é a única forma de gravar um par sem
+    // CB — nunca automático por tempo (ver CLAUDE.md); avisa o usuário do ocorrido
+    if (estavaAtiva && modoAtual === "bateria" && pendente.qr) {
+      registrar({ origem: pendente.qr.origem, ok: true, bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: "" });
+      pendente = { qr: null };
+      mostrarParIncluido(true);
+      mostrarErroTemporario("QR gravado sem par (código de barras não lido). Leia novamente se precisar completar outro par.");
+    }
   }
 
   btnCamera.addEventListener("click", () => { if (streamAtivo) pararCamera(); else iniciarCamera(); });

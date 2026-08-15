@@ -34,7 +34,13 @@ esse mesmo decoy da etiqueta (não o `PAT_UE`) e também é ignorado em silênci
 espera. Só um código de barras com valor diferente do `CDJE` fecha o par, registra a linha e limpa a
 pendência. Se nenhum código de barras válido aparecer, **depois de 20s** (`JANELA_PAREAMENTO_MS`), grava
 o QR sozinho em vez de descartar a leitura. Usuários são treinados nessa ordem; o app ainda assim mostra
-avisos curtos (ver "Interface / layout") reforçando o estado esperado.
+avisos curtos (ver "Interface / layout") reforçando o estado esperado. **Não há gravação automática por
+tempo de um QR sem par** — foi removida de propósito (ver histórico: causava perda silenciosa do
+`PAT_UE` quando o usuário demorava mais que o timeout entre QR e CB). Um QR pendente só vira registro
+"sozinho" (`PAT_UE` vazio) quando o usuário interrompe a câmera (botão "Parar") com esse QR ainda em
+espera — nesse momento o par incompleto é gravado e um aviso temporário é exibido informando o fato. Se
+o usuário quiser completar a leitura, basta ligar a câmera de novo e ler um novo QR + CB (não há edição
+retroativa do registro já gravado); se não quiser, basta salvar o arquivo normalmente.
 
 ### Modo Inventário
 Mais simples: não pareia nada. Cada código lido (de qualquer tipo) é gravado direto, junto com uma
@@ -142,14 +148,12 @@ Ferramenta usada até aqui: Playwright (Python), lançando Chromium com
 uma "fila" de resultados que o detector consome a cada chamada (permite simular sequências específicas —
 QR repetido N vezes, código de barras chegando antes/depois, timeout de pareamento etc.).
 
-Para acelerar o timeout de pareamento (20s) em teste, o código lê
-`window.__JANELA_PAREAMENTO_MS_OVERRIDE` antes de definir a constante — sobrescreva via
-`page.add_init_script()` para não esperar 20s de verdade.
-
 Sempre validar, no mínimo, antes de considerar uma mudança pronta:
 1. Modo Bateria: pareamento QR→CB (única ordem válida), os dois códigos na mesma foto (a leitura de
    galeria ordena QR antes de CB dentro da mesma foto porque a ordem de retorno do detector não é
-   garantida), timeout gravando leitura solo.
+   garantida), interrupção da câmera com QR pendente gravando leitura solo (`PAT_UE` vazio) e mostrando o
+   aviso — e confirmando que **não** existe gravação automática por tempo (esperar bastante com um QR
+   pendente e a câmera ligada não deve gravar nada sozinho).
 2. Modo Bateria — regra de ordem e decoy: código de barras lido **sem** QR pendente é ignorado por
    completo (nenhum estado muda, nada é gravado); código de barras lido **com** QR pendente e valor igual
    ao campo `CDJE` desse QR também é ignorado (continua aguardando CB de verdade).
