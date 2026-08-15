@@ -29,9 +29,10 @@
   body { padding-bottom: 16px; }
   body.camera-ativa { display: flex; flex-direction: column; min-height: 100dvh; min-height: 100vh; padding-bottom: 0; }
   body.camera-ativa main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  body.camera-ativa .resumo,
+  body.camera-ativa .acoes,
   body.camera-ativa .status-bar,
   body.camera-ativa .pendencia { flex: none; }
-  body.camera-ativa .rodape { flex: none; }
 
   header { padding: 10px 14px 8px; }
   .topo-linha { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -109,15 +110,15 @@
   .status-bar .barra { height: 3px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; }
   .status-bar .barra i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width .2s ease; }
 
-  .rodape {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    padding: 8px 14px; border-top: 1px solid var(--line); background: var(--bg-panel);
-  }
-  .rodape-contador { font-size: 12.5px; color: var(--ink-dim); white-space: nowrap; }
-  .rodape-contador b { color: var(--ink); font-weight: 700; }
-  .rodape-botoes { display: flex; gap: 6px; }
-  .rodape-botoes .btn-icone { height: 38px; width: 38px; flex: none; }
-  .rodape-botoes .btn-icone svg { width: 17px; height: 17px; }
+  .resumo { display: none; margin-top: 8px; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .resumo .card { background: var(--bg-panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 6px; text-align: center; }
+  .resumo .card b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .resumo .card span { font-size: 9.5px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .05em; }
+  .resumo .card.ok b { color: var(--ok); }
+  .resumo .card.falha b { color: var(--err); }
+
+  .acoes { display: none; gap: 8px; margin-top: 8px; }
+  .acoes .btn-icone { flex: 1; }
 </style>
 </head>
 <body>
@@ -170,11 +171,14 @@
     <span id="status-texto">Processando…</span>
     <div class="barra"><i id="status-fill"></i></div>
   </div>
-</main>
 
-<footer class="rodape" id="rodape">
-  <span class="rodape-contador" id="contador-texto">Pares coletados: 0</span>
-  <div class="rodape-botoes">
+  <div class="resumo" id="resumo">
+    <div class="card"><b id="n-total">0</b><span>itens</span></div>
+    <div class="card ok"><b id="n-ok">0</b><span>lidas</span></div>
+    <div class="card falha"><b id="n-falha">0</b><span>falharam</span></div>
+  </div>
+
+  <div class="acoes" id="acoes">
     <button class="btn-icone" id="btn-csv" type="button" title="Salvar CSV">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 4v5h8V4M8 14h8v6H8v-6Z"/></svg>
     </button>
@@ -185,7 +189,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4.8c0-.44.36-.8.8-.8h4.4c.44 0 .8.36.8.8V7m-9 0 .8 12.2c.04.6.53 1.07 1.13 1.07h6.14c.6 0 1.09-.47 1.13-1.07L17.5 7"/></svg>
     </button>
   </div>
-</footer>
+</main>
 
 <canvas id="canvas" style="display:none"></canvas>
 
@@ -205,7 +209,11 @@
   const statusBar = document.getElementById("status-bar");
   const statusTexto = document.getElementById("status-texto");
   const statusFill = document.getElementById("status-fill");
-  const contadorTexto = document.getElementById("contador-texto");
+  const resumo = document.getElementById("resumo");
+  const nTotal = document.getElementById("n-total");
+  const nOk = document.getElementById("n-ok");
+  const nFalha = document.getElementById("n-falha");
+  const acoes = document.getElementById("acoes");
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const btnCsv = document.getElementById("btn-csv");
@@ -220,7 +228,7 @@
   const ICONE_PARAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></svg>';
 
   let modoAtual = "bateria"; // "bateria" | "inventario"
-  let resultados = [];       // bateria: {origem, ok, bruto, campos, pat, erro}
+  let resultados = [];       // bateria: {arquivo, origem, ok, bruto, campos, pat, erro}
                               // inventario: {codigo, opcao, nota, ok, erro}
   let jsQRCarregado = null;
 
@@ -229,14 +237,17 @@
   let intervaloId = null;
   const INTERVALO_MS = 320;
 
-  const ultimoCodigo = { qr: null, pat: null, generico: null };
-  function resetarUltimosCodigos() {
-    ultimoCodigo.qr = null;
-    ultimoCodigo.pat = null;
-    ultimoCodigo.generico = null;
+  const ultimoVisto = new Map();
+  const JANELA_DEDUPE_MS = 1300;
+  function jaProcessadoRecentemente(valor) {
+    const agora = Date.now();
+    const t = ultimoVisto.get(valor);
+    if (t && (agora - t) < JANELA_DEDUPE_MS) return true;
+    ultimoVisto.set(valor, agora);
+    return false;
   }
 
-  // pareamento QR <-> código de barras (PAT_UE) — só no modo Bateria
+  // pareamento QR <-> código de barras (Pat.) — só no modo Bateria
   let pendente = { qr: null, pat: null };
   let timerPendente = null;
   const JANELA_PAREAMENTO_MS = window.__JANELA_PAREAMENTO_MS_OVERRIDE || 20000;
@@ -253,8 +264,8 @@
       pararCamera();
       limparPendencia();
       resultados = [];
-      resetarUltimosCodigos();
-      atualizarContador();
+      ultimoVisto.clear();
+      atualizarResumo();
     });
   });
 
@@ -287,13 +298,17 @@
 
   function registrar(r) {
     resultados.push(r);
-    atualizarContador();
+    atualizarResumo();
   }
 
-  function atualizarContador() {
+  function atualizarResumo() {
     const ok = resultados.filter(r => r.ok).length;
-    const rotulo = modoAtual === "bateria" ? "Pares" : "Itens";
-    contadorTexto.innerHTML = `${rotulo} coletados: <b>${ok}</b>`;
+    const falha = resultados.length - ok;
+    nTotal.textContent = resultados.length;
+    nOk.textContent = ok;
+    nFalha.textContent = falha;
+    resumo.style.display = resultados.length ? "grid" : "none";
+    acoes.style.display = resultados.length ? "flex" : "none";
   }
 
   function atualizarIndicadorPendencia() {
@@ -315,9 +330,9 @@
     if (timerPendente) clearTimeout(timerPendente);
     timerPendente = setTimeout(() => {
       if (pendente.qr) {
-        registrar({ origem: pendente.qr.origem, ok: true, bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: "" });
+        registrar({ arquivo: pendente.qr.arquivo, origem: pendente.qr.origem, ok: true, bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: "" });
       } else if (pendente.pat) {
-        registrar({ origem: pendente.pat.origem, ok: true, bruto: "", campos: {}, pat: pendente.pat.valor });
+        registrar({ arquivo: pendente.pat.arquivo, origem: pendente.pat.origem, ok: true, bruto: "", campos: {}, pat: pendente.pat.valor });
       }
       pendente = { qr: null, pat: null };
       timerPendente = null;
@@ -326,10 +341,8 @@
   }
 
   // ---------- roteamento por modo de cada código detectado ----------
-  function processarCodigoDetectado(codigo, origem) {
+  function processarCodigoDetectado(codigo, origem, arquivo) {
     if (modoAtual === "inventario") {
-      if (ultimoCodigo.generico === codigo.rawValue) return; // repetição do último lido: ignora
-      ultimoCodigo.generico = codigo.rawValue;
       const opcao = selectOpcao.value;
       const nota = textoLivre.value.trim();
       registrar({ codigo: codigo.rawValue, opcao, nota, ok: true });
@@ -339,17 +352,15 @@
 
     // modo bateria: pareamento QR + código de barras
     const tipo = codigo.format === "qr_code" ? "qr" : "pat";
-    if (ultimoCodigo[tipo] === codigo.rawValue) return; // repetição do último código desse tipo: ignora
-    ultimoCodigo[tipo] = codigo.rawValue;
-
     if (tipo === "qr") {
-      pendente.qr = { bruto: codigo.rawValue, campos: parsearCampos(codigo.rawValue), origem };
+      pendente.qr = { bruto: codigo.rawValue, campos: parsearCampos(codigo.rawValue), origem, arquivo };
     } else {
-      pendente.pat = { valor: codigo.rawValue, origem };
+      pendente.pat = { valor: codigo.rawValue, origem, arquivo };
     }
     if (pendente.qr && pendente.pat) {
       if (timerPendente) { clearTimeout(timerPendente); timerPendente = null; }
       registrar({
+        arquivo: pendente.qr.arquivo || pendente.pat.arquivo,
         origem: pendente.qr.origem, ok: true,
         bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: pendente.pat.valor
       });
@@ -461,7 +472,6 @@
     const arquivos = Array.from(ev.target.files || []);
     if (!arquivos.length) return;
     pararCamera();
-    resetarUltimosCodigos();
     statusBar.style.display = "block";
     let processados = 0;
 
@@ -473,17 +483,18 @@
         const codigos = await detectarCodigosEmImagem(img);
         if (!codigos.length) {
           if (modoAtual === "bateria") {
-            registrar({ origem: "galeria", ok: false, erro: "Nenhum código encontrado" });
+            registrar({ arquivo: arquivo.name, origem: "galeria", ok: false, erro: "Nenhum código encontrado" });
           } else {
             registrar({ codigo: "", opcao: "", nota: "", ok: false, erro: "Nenhum código encontrado" });
           }
         } else {
           for (const codigo of codigos) {
-            processarCodigoDetectado(codigo, "galeria");
+            if (jaProcessadoRecentemente(codigo.rawValue)) continue;
+            processarCodigoDetectado(codigo, "galeria", arquivo.name);
           }
         }
       } catch (e) {
-        if (modoAtual === "bateria") registrar({ origem: "galeria", ok: false, erro: e.message });
+        if (modoAtual === "bateria") registrar({ arquivo: arquivo.name, origem: "galeria", ok: false, erro: e.message });
         else registrar({ codigo: "", opcao: "", nota: "", ok: false, erro: e.message });
       }
       processados++;
@@ -499,7 +510,6 @@
   // ================= MODO CÂMERA =================
   async function iniciarCamera() {
     erroCamera.style.display = "none";
-    resetarUltimosCodigos();
     try {
       streamAtivo = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } }, audio: false
@@ -540,7 +550,8 @@
           }
         }
         for (const codigo of codigos) {
-          processarCodigoDetectado(codigo, "câmera");
+          if (jaProcessadoRecentemente(codigo.rawValue)) continue;
+          processarCodigoDetectado(codigo, "câmera", null);
         }
       } catch (e) { /* ignora falha pontual de um frame */ }
     };
@@ -584,13 +595,14 @@
         if (k !== "CDJE" && !todasChaves.includes(k)) todasChaves.push(k);
       }
     }
-    const colunas = ["PAT_UE", "CDJE", "origem", "status", ...todasChaves, "conteudo_bruto"];
+    const colunas = ["arquivo", "origem", "status", "CDJE", "Pat.", ...todasChaves, "conteudo_bruto"];
     const linhas = [colunas.join(",")];
     for (const r of resultados) {
       const linha = colunas.map(c => {
-        if (c === "PAT_UE") return escaparCsv(r.pat || "", ",");
+        if (c === "arquivo") return escaparCsv(r.arquivo, ",");
         if (c === "origem") return escaparCsv(r.origem, ",");
         if (c === "status") return escaparCsv(r.ok ? "OK" : (r.erro || "código não encontrado"), ",");
+        if (c === "Pat.") return escaparCsv(r.pat || "", ",");
         if (c === "conteudo_bruto") return escaparCsv(r.bruto || "", ",");
         return escaparCsv((r.campos || {})[c] || "", ",");
       });
@@ -659,9 +671,9 @@
 
   btnLimpar.addEventListener("click", () => {
     resultados = [];
-    resetarUltimosCodigos();
+    ultimoVisto.clear();
     limparPendencia();
-    atualizarContador();
+    atualizarResumo();
     inputFotos.value = "";
   });
 })();
