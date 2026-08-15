@@ -124,7 +124,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor QR</span>
+    <span class="titulo-mini">Leitor PAT&amp;BAT (v.3)</span>
     <div class="seg-modo">
       <button type="button" data-modo="bateria" class="ativo">Bateria</button>
       <button type="button" data-modo="inventario">Inventário</button>
@@ -230,10 +230,16 @@
   const INTERVALO_MS = 320;
 
   const ultimoCodigo = { qr: null, pat: null, generico: null };
+  // confirmação por repetição: só câmera ao vivo + modo Bateria, evita descasar par ao
+  // virar a câmera acidentalmente para o par vizinho (ver CLAUDE.md)
+  const LIMIAR_CONFIRMACAO_CAMERA = window.__LIMIAR_CONFIRMACAO_CAMERA_OVERRIDE || 3;
+  const candidato = { qr: null, pat: null }; // {valor, contagem}
   function resetarUltimosCodigos() {
     ultimoCodigo.qr = null;
     ultimoCodigo.pat = null;
     ultimoCodigo.generico = null;
+    candidato.qr = null;
+    candidato.pat = null;
   }
 
   // pareamento QR <-> código de barras (PAT_UE) — só no modo Bateria
@@ -340,6 +346,16 @@
     // modo bateria: pareamento QR + código de barras
     const tipo = codigo.format === "qr_code" ? "qr" : "pat";
     if (ultimoCodigo[tipo] === codigo.rawValue) return; // repetição do último código desse tipo: ignora
+
+    if (origem === "câmera") {
+      // exige leituras sucessivas do mesmo código antes de aceitar como novo, pra reduzir
+      // o risco de pegar por engano um item do par vizinho ao girar a câmera
+      const cand = candidato[tipo];
+      if (cand && cand.valor === codigo.rawValue) cand.contagem++;
+      else candidato[tipo] = { valor: codigo.rawValue, contagem: 1 };
+      if (candidato[tipo].contagem < LIMIAR_CONFIRMACAO_CAMERA) return;
+      candidato[tipo] = null;
+    }
     ultimoCodigo[tipo] = codigo.rawValue;
 
     if (tipo === "qr") {
