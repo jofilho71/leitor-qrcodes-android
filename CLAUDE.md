@@ -24,12 +24,17 @@ O app tem dois modos, alternados por um segmented control no topo (`data-modo="b
 (`window.confirm`) e limpa o estado (resultados, pendências, dedupe) — cada modo é uma sessão isolada.
 
 ### Modo Bateria (padrão)
-Pareia um **QR code** com um **código de barras** lido em qualquer ordem (o QR traz os dados da etiqueta
-da bateria; o código de barras é o patrimônio da urna — `PAT_UE`). A lógica mantém um "QR pendente" e um
-"código de barras pendente"; assim que os dois existem, fecha o par, registra uma linha e limpa a
-pendência. Se só um dos dois aparecer, mostra um aviso curto ("QR lido — falta o código de barras") e
-**depois de 20s sem completar** (`JANELA_PAREAMENTO_MS`), grava o que tiver sozinho em vez de descartar a
-leitura.
+Pareia um **QR code** com um **código de barras** (o QR traz os dados da etiqueta da bateria; o código de
+barras é o patrimônio da urna — `PAT_UE`). **A ordem é fixa: QR sempre primeiro.** Um código de barras
+lido sem QR pendente é **ignorado por completo, em silêncio** (não vira pendência, não gera aviso) — a
+etiqueta da bateria tem um código de barras colado logo acima do QR que repete o valor do campo `CDJE`
+do próprio QR, e sem essa regra de ordem ele poderia ser confundido com o `PAT_UE` da urna. Depois que o
+QR é lido e vira pendente, se o código de barras seguinte tiver o **mesmo valor do `CDJE`** desse QR, é
+esse mesmo decoy da etiqueta (não o `PAT_UE`) e também é ignorado em silêncio, sem sair do estado de
+espera. Só um código de barras com valor diferente do `CDJE` fecha o par, registra a linha e limpa a
+pendência. Se nenhum código de barras válido aparecer, **depois de 20s** (`JANELA_PAREAMENTO_MS`), grava
+o QR sozinho em vez de descartar a leitura. Usuários são treinados nessa ordem; o app ainda assim mostra
+avisos curtos (ver "Interface / layout") reforçando o estado esperado.
 
 ### Modo Inventário
 Mais simples: não pareia nada. Cada código lido (de qualquer tipo) é gravado direto, junto com uma
@@ -95,6 +100,12 @@ resultar em mais de um campo — caso contrário o conteúdo bruto é tratado co
   câmera (`flex:1`) cresce pra ocupar só o espaço que sobra acima do rodapé — nunca sobrepõe, nunca some.
 - Ao ativar a câmera, o botão de câmera vira "Parar" (ícone muda de câmera pra quadrado sólido) — um
   botão só, sem par Iniciar/Parar separado.
+- **Status colorido** (`#pendencia` + borda do `#moldura` na câmera, ambos sempre com a mesma cor):
+  branco = aguardando leitura (Bateria: "Esperando leitura de QR Code"; Inventário: "Esperando leitura");
+  amarelo = só no modo Bateria, QR pendente aguardando o código de barras ("Esperando leitura de CB");
+  verde = leitura concluída ("Par incluído" / "Par incluso (sozinho)" no timeout / "Item incluído" no
+  Inventário) — fica **1s** e volta pro branco (ou amarelo, se um novo QR já tiver sido lido nesse
+  intervalo). É reflexo direto do estado interno de pareamento, não um elemento decorativo independente.
 
 ## Compartilhamento
 
@@ -136,13 +147,20 @@ Para acelerar o timeout de pareamento (20s) em teste, o código lê
 `page.add_init_script()` para não esperar 20s de verdade.
 
 Sempre validar, no mínimo, antes de considerar uma mudança pronta:
-1. Modo Bateria: pareamento nas duas ordens (QR→CB e CB→QR), os dois códigos na mesma foto, timeout
-   gravando leitura solo.
-2. Deduplicação: mesmo código repetido em sequência conta 1 vez; código diferente interrompe a repetição
+1. Modo Bateria: pareamento QR→CB (única ordem válida), os dois códigos na mesma foto (a leitura de
+   galeria ordena QR antes de CB dentro da mesma foto porque a ordem de retorno do detector não é
+   garantida), timeout gravando leitura solo.
+2. Modo Bateria — regra de ordem e decoy: código de barras lido **sem** QR pendente é ignorado por
+   completo (nenhum estado muda, nada é gravado); código de barras lido **com** QR pendente e valor igual
+   ao campo `CDJE` desse QR também é ignorado (continua aguardando CB de verdade).
+3. Estado visual (`#pendencia` + `#moldura`): branco no início/aguardando QR, amarelo com QR pendente,
+   verde por 1s ao fechar um par (completo ou "sozinho" por timeout) ou ao gravar um item no Inventário,
+   com retorno ao estado correto depois do 1s.
+4. Deduplicação: mesmo código repetido em sequência conta 1 vez; código diferente interrompe a repetição
    e volta a contar normalmente depois.
-3. Modo Inventário: com e sem nota, opção correta no CSV.
-4. Conteúdo exato do CSV baixado (`page.expect_download()`) — cabeçalho, separador, ordem das colunas.
-5. Regressão dos dois modos sempre que mexer em lógica compartilhada (parsing, detecção, dedupe).
+5. Modo Inventário: com e sem nota, opção correta no CSV.
+6. Conteúdo exato do CSV baixado (`page.expect_download()`) — cabeçalho, separador, ordem das colunas.
+7. Regressão dos dois modos sempre que mexer em lógica compartilhada (parsing, detecção, dedupe).
 
 ## Convenções
 

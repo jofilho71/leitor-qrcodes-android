@@ -78,9 +78,12 @@
   .pendencia {
     display: none;
     margin-top: 8px; padding: 7px 10px; border-radius: 8px;
-    background: var(--bg-panel); border: 1px solid var(--accent);
-    font-size: 12px; color: var(--accent); text-align: center;
+    background: var(--bg-panel); border: 1px solid var(--line);
+    font-size: 12px; text-align: center;
   }
+  .pendencia.estado-branco { border-color: var(--ink-dim); color: var(--ink-dim); }
+  .pendencia.estado-amarelo { border-color: var(--accent); color: var(--accent); }
+  .pendencia.estado-verde { border-color: var(--ok); color: var(--ok); }
 
   .camera-wrap {
     display: none; margin-top: 8px; border-radius: 12px; overflow: hidden;
@@ -89,12 +92,15 @@
   body.camera-ativa .camera-wrap { flex: 1; aspect-ratio: auto; }
   .camera-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .camera-wrap .moldura {
-    position: absolute; inset: 14%; border: 2px solid rgba(211,161,46,.85);
+    position: absolute; inset: 14%; border: 2px solid rgba(232,234,237,.85);
     border-radius: 14px; pointer-events: none;
     transition: border-color .15s ease, transform .15s ease;
   }
-  .camera-wrap .moldura.flash-parcial { border-color: var(--accent); transform: scale(0.98); }
-  .camera-wrap .moldura.flash-completo { border-color: var(--ok); transform: scale(0.97); }
+  .camera-wrap .moldura.estado-branco { border-color: rgba(232,234,237,.85); }
+  .camera-wrap .moldura.estado-amarelo { border-color: rgba(211,161,46,.85); }
+  .camera-wrap .moldura.estado-verde { border-color: rgba(76,175,125,.85); }
+  .camera-wrap .moldura.flash-parcial,
+  .camera-wrap .moldura.flash-completo { transform: scale(0.97); }
 
   .erro-camera {
     display: none; margin-top: 8px; padding: 8px 10px; border-radius: 8px;
@@ -124,7 +130,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT&amp;BAT (v.3)</span>
+    <span class="titulo-mini">Leitor PAT&amp;BAT (v.4)</span>
     <div class="seg-modo">
       <button type="button" data-modo="bateria" class="ativo">Bateria</button>
       <button type="button" data-modo="inventario">Inventário</button>
@@ -243,9 +249,45 @@
   }
 
   // pareamento QR <-> código de barras (PAT_UE) — só no modo Bateria
-  let pendente = { qr: null, pat: null };
+  // única ordem aceita é QR -> CB; um CB sem QR pendente nunca vira pendência (ver CLAUDE.md)
+  let pendente = { qr: null };
   let timerPendente = null;
   const JANELA_PAREAMENTO_MS = window.__JANELA_PAREAMENTO_MS_OVERRIDE || 20000;
+
+  // estado visual (cor da borda da câmera + caixa de status): branco/amarelo/verde
+  const TEXTOS_ESTADO = {
+    bateria: { branco: "Esperando leitura de QR Code", amarelo: "Esperando leitura de CB", verde: "Par incluído", verdeSozinho: "Par incluso (sozinho)" },
+    inventario: { branco: "Esperando leitura", verde: "Item incluído" }
+  };
+  let timerEstadoVisual = null;
+
+  function definirEstadoVisual(cor, texto) {
+    pendenciaEl.textContent = texto;
+    pendenciaEl.style.display = "block";
+    pendenciaEl.classList.remove("estado-branco", "estado-amarelo", "estado-verde");
+    pendenciaEl.classList.add("estado-" + cor);
+    moldura.classList.remove("estado-branco", "estado-amarelo", "estado-verde");
+    moldura.classList.add("estado-" + cor);
+  }
+
+  function atualizarEstadoVisual() {
+    if (timerEstadoVisual) { clearTimeout(timerEstadoVisual); timerEstadoVisual = null; }
+    if (modoAtual === "bateria") {
+      if (pendente.qr) definirEstadoVisual("amarelo", TEXTOS_ESTADO.bateria.amarelo);
+      else definirEstadoVisual("branco", TEXTOS_ESTADO.bateria.branco);
+    } else {
+      definirEstadoVisual("branco", TEXTOS_ESTADO.inventario.branco);
+    }
+  }
+
+  function mostrarParIncluido(sozinho) {
+    const texto = modoAtual === "bateria"
+      ? (sozinho ? TEXTOS_ESTADO.bateria.verdeSozinho : TEXTOS_ESTADO.bateria.verde)
+      : TEXTOS_ESTADO.inventario.verde;
+    definirEstadoVisual("verde", texto);
+    if (timerEstadoVisual) clearTimeout(timerEstadoVisual);
+    timerEstadoVisual = setTimeout(() => { timerEstadoVisual = null; atualizarEstadoVisual(); }, 1000);
+  }
 
   // ================= TROCA DE MODO =================
   botoesModo.forEach(btn => {
@@ -302,19 +344,10 @@
     contadorTexto.innerHTML = `${rotulo} coletados: <b>${ok}</b>`;
   }
 
-  function atualizarIndicadorPendencia() {
-    if (modoAtual !== "bateria") { pendenciaEl.style.display = "none"; return; }
-    let texto = "";
-    if (pendente.qr && !pendente.pat) texto = "QR lido — falta o código de barras";
-    else if (pendente.pat && !pendente.qr) texto = "Código de barras lido — falta o QR";
-    if (texto) { pendenciaEl.textContent = texto; pendenciaEl.style.display = "block"; }
-    else { pendenciaEl.style.display = "none"; }
-  }
-
   function limparPendencia() {
-    pendente = { qr: null, pat: null };
+    pendente = { qr: null };
     if (timerPendente) { clearTimeout(timerPendente); timerPendente = null; }
-    atualizarIndicadorPendencia();
+    atualizarEstadoVisual();
   }
 
   function agendarExpiracaoPendencia() {
@@ -322,12 +355,10 @@
     timerPendente = setTimeout(() => {
       if (pendente.qr) {
         registrar({ origem: pendente.qr.origem, ok: true, bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: "" });
-      } else if (pendente.pat) {
-        registrar({ origem: pendente.pat.origem, ok: true, bruto: "", campos: {}, pat: pendente.pat.valor });
+        pendente = { qr: null };
+        timerPendente = null;
+        mostrarParIncluido(true);
       }
-      pendente = { qr: null, pat: null };
-      timerPendente = null;
-      atualizarIndicadorPendencia();
     }, JANELA_PAREAMENTO_MS);
   }
 
@@ -340,11 +371,14 @@
       const nota = textoLivre.value.trim();
       registrar({ codigo: codigo.rawValue, opcao, nota, ok: true });
       piscarMoldura("completo");
+      mostrarParIncluido();
       return;
     }
 
-    // modo bateria: pareamento QR + código de barras
+    // modo bateria: pareamento QR + código de barras — só QR pode abrir um par;
+    // um CB lido sem QR pendente é sempre ignorado, em silêncio (ver CLAUDE.md)
     const tipo = codigo.format === "qr_code" ? "qr" : "pat";
+    if (tipo === "pat" && !pendente.qr) return;
     if (ultimoCodigo[tipo] === codigo.rawValue) return; // repetição do último código desse tipo: ignora
 
     if (origem === "câmera") {
@@ -360,22 +394,24 @@
 
     if (tipo === "qr") {
       pendente.qr = { bruto: codigo.rawValue, campos: parsearCampos(codigo.rawValue), origem };
-    } else {
-      pendente.pat = { valor: codigo.rawValue, origem };
-    }
-    if (pendente.qr && pendente.pat) {
-      if (timerPendente) { clearTimeout(timerPendente); timerPendente = null; }
-      registrar({
-        origem: pendente.qr.origem, ok: true,
-        bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: pendente.pat.valor
-      });
-      pendente = { qr: null, pat: null };
-      piscarMoldura("completo");
-    } else {
       agendarExpiracaoPendencia();
       piscarMoldura("parcial");
+      atualizarEstadoVisual();
+      return;
     }
-    atualizarIndicadorPendencia();
+
+    // tipo === "pat", com QR pendente: se repetir o CDJE do próprio QR, é o CB "decoy"
+    // colado na etiqueta da bateria (não é o PAT_UE da urna) — ignora em silêncio
+    if (pendente.qr.campos && codigo.rawValue === pendente.qr.campos.CDJE) return;
+
+    if (timerPendente) { clearTimeout(timerPendente); timerPendente = null; }
+    registrar({
+      origem: pendente.qr.origem, ok: true,
+      bruto: pendente.qr.bruto, campos: pendente.qr.campos, pat: codigo.rawValue
+    });
+    pendente = { qr: null };
+    piscarMoldura("completo");
+    mostrarParIncluido(false);
   }
 
   // ---------- formatos suportados / detector nativo ----------
@@ -494,7 +530,11 @@
             registrar({ codigo: "", opcao: "", nota: "", ok: false, erro: "Nenhum código encontrado" });
           }
         } else {
-          for (const codigo of codigos) {
+          // dentro de uma mesma foto, o QR precisa ser processado antes do CB (regra
+          // de ordem do modo Bateria) — a ordem de retorno do detector não é garantida
+          const ordenados = codigos.slice().sort((a, b) =>
+            (a.format === "qr_code" ? 0 : 1) - (b.format === "qr_code" ? 0 : 1));
+          for (const codigo of ordenados) {
             processarCodigoDetectado(codigo, "galeria");
           }
         }
@@ -533,7 +573,7 @@
     iconeCamera.innerHTML = ICONE_PARAR;
     btnGaleria.style.opacity = ".5";
     btnGaleria.style.pointerEvents = "none";
-    atualizarIndicadorPendencia();
+    atualizarEstadoVisual();
 
     const detectorNativo = ("BarcodeDetector" in window) ? await obterDetectorNativo() : null;
 
@@ -680,6 +720,8 @@
     atualizarContador();
     inputFotos.value = "";
   });
+
+  atualizarEstadoVisual();
 })();
 </script>
 </body>
