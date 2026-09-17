@@ -58,6 +58,17 @@ esse mesmo decoy da etiqueta (não o `PAT_UE`) e também é ignorado em silênci
 espera. Só um código de barras com valor diferente do `CDJE` fecha o par, registra a linha e limpa a
 pendência.
 
+**Validação de padrão do `PAT_UE`**: o patrimônio da urna segue o mesmo padrão do modo Inventário —
+`PADRAO_PATRIMONIO = /^4551\d{6}$/` (10 dígitos, sempre começando com `4551`), constante compartilhada
+entre os dois modos. Um código de barras lido com QR pendente que não bater com esse padrão é **ignorado
+em silêncio**, exatamente como o decoy do `CDJE` — o app continua esperando o CB de verdade, sem fechar o
+par com lixo. Essa checagem existe porque testes de campo mostraram o mesmo código de barras físico sendo
+lido pela câmera com numerações diferentes entre tentativas (dígito trocado, dígito a mais/a menos) —
+ruído de decodificação em condições de pouca luz/foco, não um bug de pareamento. A validação de padrão
+filtra o ruído mais grosseiro (tamanho errado, prefixo errado); um valor com 10 dígitos começando com
+`4551` mas com dígitos internos ainda assim incorretos **não** é pego por essa checagem — não há como
+validar o conteúdo exato sem um checksum conhecido do formato de barras usado.
+
 **Não há gravação automática por tempo** de um QR sem par — foi removida de propósito (causava perda
 silenciosa do `PAT_UE` quando o usuário demorava mais que um timeout entre QR e CB; ver seção
 "Deduplicação"). Um QR pendente só vira registro "sozinho" (`PAT_UE` vazio) quando o usuário interrompe a
@@ -71,10 +82,11 @@ Mais simples: não pareia nada, mas tem regras próprias de aceitação bem mais
 
 - **Só lê código de barras** — qualquer detecção com `codigo.format === "qr_code"` é ignorada de imediato,
   antes de qualquer outra checagem.
-- **Só aceita o padrão de patrimônio da empresa**: `PADRAO_PATRIMONIO_INVENTARIO = /^4551\d{6}$/` — 10
-  dígitos numéricos, sempre começando com `4551`. Qualquer código de barras fora desse padrão (outro
-  formato de etiqueta, código de outro sistema, leitura ruidosa) é ignorado em silêncio, sem virar linha
-  de erro. Se a numeração real do patrimônio mudar de prefixo/tamanho um dia, é só ajustar essa regex.
+- **Só aceita o padrão de patrimônio da empresa**: `PADRAO_PATRIMONIO = /^4551\d{6}$/` (constante
+  compartilhada com o `PAT_UE` do modo Bateria, ver seção "Modo Bateria") — 10 dígitos numéricos, sempre
+  começando com `4551`. Qualquer código de barras fora desse padrão (outro formato de etiqueta, código de
+  outro sistema, leitura ruidosa) é ignorado em silêncio, sem virar linha de erro. Se a numeração real do
+  patrimônio mudar de prefixo/tamanho um dia, é só ajustar essa regex (afeta os dois modos).
 - **Nunca duplica um patrimônio na mesma sessão**: `codigosInventarioVistos` (um `Set`) guarda todo código
   já aceito; uma leitura repetida — de qualquer origem (câmera ou galeria), a qualquer momento, não só a
   leitura imediatamente anterior — é descartada em silêncio. Esse Set **não é resetado** junto com
@@ -255,7 +267,9 @@ Sempre validar, no mínimo, antes de considerar uma mudança pronta:
    pendente e a câmera ligada não deve gravar nada sozinho).
 2. Modo Bateria — regra de ordem e decoy: código de barras lido **sem** QR pendente é ignorado por
    completo (nenhum estado muda, nada é gravado); código de barras lido **com** QR pendente e valor igual
-   ao campo `CDJE` desse QR também é ignorado (continua aguardando CB de verdade).
+   ao campo `CDJE` desse QR também é ignorado (continua aguardando CB de verdade); código de barras lido
+   **com** QR pendente e valor fora do padrão `PADRAO_PATRIMONIO` (ex.: 11 dígitos, ou não começando com
+   `4551`) também é ignorado, tanto vindo da câmera quanto da galeria.
 3. Deduplicação por tipo (câmera): mesmo código repetido em sequência na câmera conta 1 vez; código
    diferente interrompe a repetição e volta a contar normalmente depois.
 4. Deduplicação não se aplica entre fotos da galeria: duas fotos distintas de um lote com o mesmo valor de

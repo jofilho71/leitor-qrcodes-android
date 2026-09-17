@@ -53,6 +53,9 @@ Usado para parear o **QR code da etiqueta da bateria** com o **código de barras
 - **Código de barras lido sem ter lido o QR antes**: é ignorado, nada acontece. Aponte primeiro para o QR.
 - **Etiqueta com um código de barras "decoy" colado perto do QR**: se esse código repetir os mesmos dados
   do QR, o app ignora e continua esperando o código de barras verdadeiro da urna.
+- **Leitura ruidosa do código de barras** (pouca luz, fora de foco, câmera tremendo): se o número lido não
+  bater com o padrão do patrimônio (10 dígitos começando com `4551`), o app ignora essa leitura e continua
+  esperando — aponte de novo, com mais luz e mantendo o celular firme, até o código ser lido certo.
 - **Parar a câmera com um QR pendente** (sem ter lido o código de barras ainda): o app grava esse QR
   sozinho (sem patrimônio) e avisa: *"QR gravado sem par (código de barras não lido)."* Se precisar
   completar depois, ligue a câmera de novo e leia um novo QR + código de barras normalmente — não dá para

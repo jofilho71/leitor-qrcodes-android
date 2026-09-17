@@ -262,8 +262,9 @@
     candidato.pat = null;
   }
 
-  // padrão de patrimônio aceito no modo Inventário: 10 dígitos, sempre começando com 4551
-  const PADRAO_PATRIMONIO_INVENTARIO = /^4551\d{6}$/;
+  // padrão de patrimônio da empresa: 10 dígitos, sempre começando com 4551 — vale tanto pro
+  // código de barras avulso do Inventário quanto pro PAT_UE pareado no modo Bateria (ver CLAUDE.md)
+  const PADRAO_PATRIMONIO = /^4551\d{6}$/;
   // patrimônios já registrados no Inventário nesta sessão — nunca duplica, mesmo entre
   // câmera e galeria ou entre leituras bem espaçadas no tempo (não é um dedup de frame
   // contínuo como o de ultimoCodigo/candidato acima, por isso vive fora de resetarUltimosCodigos
@@ -398,7 +399,7 @@
   function processarCodigoDetectado(codigo, origem) {
     if (modoAtual === "inventario") {
       if (codigo.format === "qr_code") return; // só lê código de barras nesse modo, QR é ignorado
-      if (!PADRAO_PATRIMONIO_INVENTARIO.test(codigo.rawValue)) return; // fora do padrão: ignora
+      if (!PADRAO_PATRIMONIO.test(codigo.rawValue)) return; // fora do padrão: ignora
       if (codigosInventarioVistos.has(codigo.rawValue)) return; // já lido nesta sessão: descarta
       codigosInventarioVistos.add(codigo.rawValue);
       const opcao = selectOpcao.value;
@@ -413,6 +414,10 @@
     // um CB lido sem QR pendente é sempre ignorado, em silêncio (ver CLAUDE.md)
     const tipo = codigo.format === "qr_code" ? "qr" : "pat";
     if (tipo === "pat" && !pendente.qr) return;
+    // decode ruidoso do código de barras (câmera com pouca luz/foco) às vezes produz um valor
+    // fora do padrão de patrimônio para o mesmo código físico (dígito trocado, dígito a mais) —
+    // ignora em silêncio e continua esperando o CB de verdade, mesma lógica do decoy do CDJE
+    if (tipo === "pat" && !PADRAO_PATRIMONIO.test(codigo.rawValue)) return;
     // mesmo motivo do modo Inventário: esse dedup existe pra não reprocessar o mesmo frame da
     // câmera repetidas vezes, então não se aplica a fotos distintas da galeria — um código de
     // barras igual ao da foto anterior (etiqueta com erro de impressão/duplicada) é um item
