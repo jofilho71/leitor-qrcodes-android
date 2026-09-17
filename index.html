@@ -142,7 +142,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT &amp; BAT - Polo 24 (v 0.7)</span>
+    <span class="titulo-mini">Leitor PAT &amp; BAT - Polo 24 (v 0.9)</span>
     <div class="seg-modo">
       <button type="button" data-modo="bateria" class="ativo">Bateria</button>
       <button type="button" data-modo="inventario">Inventário</button>
@@ -270,6 +270,20 @@
   // contínuo como o de ultimoCodigo/candidato acima, por isso vive fora de resetarUltimosCodigos
   // e só é zerado quando os resultados também são: troca de modo e botão Limpar)
   let codigosInventarioVistos = new Set();
+  // último patrimônio aceito no Inventário (independente de origem) — usado só pra comparar com a
+  // leitura seguinte e pegar decode ruidoso do mesmo código físico (poucos dígitos trocados, mesma
+  // causa do PADRAO_PATRIMONIO e do codigoTocaBorda, ver CLAUDE.md). Compara só com o anterior, não
+  // com todo o histórico (esse é o papel do codigosInventarioVistos, que é um dedup exato)
+  let ultimoPatrimonioAceito = null;
+  const LIMITE_DIFERENCA_PATRIMONIO = 2;
+  function diferencaPequena(a, b, limite) {
+    if (!a || !b || a.length !== b.length) return false;
+    let diferencas = 0;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i] && ++diferencas > limite) return false;
+    }
+    return diferencas > 0;
+  }
 
   // pareamento QR <-> código de barras (PAT_UE) — só no modo Bateria
   // única ordem aceita é QR -> CB; um CB sem QR pendente nunca vira pendência (ver CLAUDE.md)
@@ -325,6 +339,7 @@
       limparPendencia();
       resultados = [];
       codigosInventarioVistos.clear();
+      ultimoPatrimonioAceito = null;
       resetarUltimosCodigos();
       atualizarContador();
     });
@@ -401,7 +416,12 @@
       if (codigo.format === "qr_code") return; // só lê código de barras nesse modo, QR é ignorado
       if (!PADRAO_PATRIMONIO.test(codigo.rawValue)) return; // fora do padrão: ignora
       if (codigosInventarioVistos.has(codigo.rawValue)) return; // já lido nesta sessão: descarta
+      // decode ruidoso do mesmo código físico pode gerar um valor diferente mas ainda dentro do
+      // padrão (poucos dígitos trocados) — compara só com o último aceito, não com todo o
+      // histórico, pra não bloquear um patrimônio genuinamente novo só por coincidência de dígitos
+      if (diferencaPequena(codigo.rawValue, ultimoPatrimonioAceito, LIMITE_DIFERENCA_PATRIMONIO)) return;
       codigosInventarioVistos.add(codigo.rawValue);
+      ultimoPatrimonioAceito = codigo.rawValue;
       const opcao = selectOpcao.value;
       const nota = textoLivre.value.trim();
       registrar({ codigo: codigo.rawValue, opcao, nota, ok: true });
@@ -487,6 +507,22 @@
     return detectorCache;
   }
 
+  // descarta uma detecção cuja caixa delimitadora encosta na borda do frame — sinal de que o
+  // código pode estar cortado (fora do quadro), o que em formatos de barras lineares mais fracos
+  // (ex.: ITF, sem checksum obrigatório) pode decodificar como um valor menor/diferente do código
+  // inteiro. Só o detector nativo devolve boundingBox; jsQR só lê QR (correção de erro própria,
+  // sem esse risco), então essa checagem não se aplica a ele.
+  const MARGEM_BORDA_FRACAO = 0.02;
+  function codigoTocaBorda(deteccao, largura, altura) {
+    const caixa = deteccao.boundingBox;
+    if (!caixa || !largura || !altura) return false;
+    const margemX = largura * MARGEM_BORDA_FRACAO;
+    const margemY = altura * MARGEM_BORDA_FRACAO;
+    return caixa.x <= margemX || caixa.y <= margemY ||
+      (caixa.x + caixa.width) >= (largura - margemX) ||
+      (caixa.y + caixa.height) >= (altura - margemY);
+  }
+
   function garantirJsQR() {
     if (window.jsQR) return Promise.resolve();
     if (jsQRCarregado) return jsQRCarregado;
@@ -544,7 +580,8 @@
           desenharEmCanvas(img, fator);
           try {
             const codigos = await detector.detect(canvas);
-            if (codigos && codigos.length) return codigos.map(c => ({ rawValue: c.rawValue, format: c.format }));
+            const validos = (codigos || []).filter(c => !codigoTocaBorda(c, canvas.width, canvas.height));
+            if (validos.length) return validos.map(c => ({ rawValue: c.rawValue, format: c.format }));
           } catch (e) { /* tenta próxima escala */ }
         }
       }
@@ -645,7 +682,9 @@
         let codigos = [];
         if (detectorNativo) {
           const brutos = await detectorNativo.detect(video);
-          codigos = (brutos || []).map(c => ({ rawValue: c.rawValue, format: c.format }));
+          codigos = (brutos || [])
+            .filter(c => !codigoTocaBorda(c, video.videoWidth, video.videoHeight))
+            .map(c => ({ rawValue: c.rawValue, format: c.format }));
         } else {
           await garantirJsQR();
           const w = video.videoWidth, h = video.videoHeight;
@@ -801,6 +840,7 @@
   btnLimpar.addEventListener("click", () => {
     resultados = [];
     codigosInventarioVistos.clear();
+    ultimoPatrimonioAceito = null;
     resetarUltimosCodigos();
     limparPendencia();
     atualizarContador();

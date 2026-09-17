@@ -56,6 +56,9 @@ Usado para parear o **QR code da etiqueta da bateria** com o **código de barras
 - **Leitura ruidosa do código de barras** (pouca luz, fora de foco, câmera tremendo): se o número lido não
   bater com o padrão do patrimônio (10 dígitos começando com `4551`), o app ignora essa leitura e continua
   esperando — aponte de novo, com mais luz e mantendo o celular firme, até o código ser lido certo.
+- **Código de barras cortado na borda da tela**: se o código estiver parcialmente fora do enquadramento, a
+  leitura é ignorada mesmo que pareça um número válido — centralize o código de barras dentro da moldura
+  antes de aproximar, em vez de deixá-lo perto da borda da imagem.
 - **Parar a câmera com um QR pendente** (sem ter lido o código de barras ainda): o app grava esse QR
   sozinho (sem patrimônio) e avisa: *"QR gravado sem par (código de barras não lido)."* Se precisar
   completar depois, ligue a câmera de novo e leia um novo QR + código de barras normalmente — não dá para
@@ -86,6 +89,11 @@ novo a cada leitura, só se a categoria mudar no meio da coleta.
 - **Um mesmo patrimônio nunca é contado duas vezes** na mesma coleta — se por engano você passar a câmera
   de novo sobre um código já lido (ou ler a mesma etiqueta em outra foto da galeria), ele é descartado
   automaticamente. Não precisa se preocupar em escanear "de mais".
+- **Leitura muito parecida com a anterior**: se um número lido tiver só 1 ou 2 dígitos diferentes do
+  último patrimônio aceito, o app descarta — é sinal de decodificação errada do mesmo código físico, não
+  um item novo. Se por acaso dois itens diferentes de verdade tiverem números vizinhos (ex.: patrimônios
+  sequenciais) e o segundo for descartado por engano, escaneie outro item qualquer no meio e depois volte
+  nele — repetir a mesma leitura na hora não resolve, porque o "último aceito" continua sendo o mesmo.
 
 À medida que os patrimônios são lidos, eles aparecem numa lista na tela, numerados na ordem da leitura —
 use essa lista para conferir o que já foi escaneado sem precisar exportar o arquivo.

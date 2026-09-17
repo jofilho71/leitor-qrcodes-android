@@ -94,6 +94,22 @@ Mais simples: não pareia nada, mas tem regras próprias de aceitação bem mais
   galeria) — só é zerado quando `resultados` também é: troca de modo e botão Limpar. Isso também elimina a
   necessidade de confirmação-por-repetição na câmera: como o próprio código já registrado vira duplicata
   descartada, frames repetidos do mesmo patrimônio já são tratados corretamente sem lógica extra.
+- **Descarte por diferença pequena do último aceito** (`ultimoPatrimonioAceito` +
+  `diferencaPequena(a, b, limite)`, `LIMITE_DIFERENCA_PATRIMONIO = 2`): decode ruidoso do mesmo código
+  físico às vezes produz um valor diferente do último aceito mas ainda dentro do padrão de patrimônio
+  (poucos dígitos trocados, mesmo comprimento) — foi observado em campo o mesmo código de barras saindo
+  com números como `4551265139`/`4551265239`/`4551265269` em leituras sucessivas. Uma leitura com 1 ou 2
+  caracteres diferentes do **último patrimônio aceito** (não do histórico inteiro — esse é o papel do
+  `codigosInventarioVistos`, que é um dedup exato) é descartada em silêncio, mesma lógica de "ruído,
+  ignora e continua" das outras checagens desta seção. `ultimoPatrimonioAceito` só é atualizado quando um
+  código é de fato aceito, e só é zerado junto com `codigosInventarioVistos`: troca de modo e botão
+  Limpar (não é resetado por reinício de câmera/lote de galeria, mesma vida útil do Set).
+  **Risco conhecido e aceito**: se a numeração de patrimônio for sequencial (dois itens genuinamente
+  diferentes lidos em sequência, com números vizinhos, ex. `...269` depois `...270`), essa checagem pode
+  descartar por engano o segundo item por engano — nesse caso, uma segunda leitura (ela já não vai mais
+  ser "a última aceita") é aceita normalmente. Se isso se mostrar um problema recorrente em campo, a
+  correção é aumentar `LIMITE_DIFERENCA_PATRIMONIO` pra baixo (ex. 1) ou remover essa checagem — não
+  tentar arbitrar automaticamente "qual dos dois é o valor certo" sem mais contexto do formato do CB.
 
 Cada código aceito é gravado junto com uma categoria (select: Runin/Reserva/Movimentação/Conserto) e uma
 nota curta opcional, ambos definidos uma vez e reaproveitados em leituras sucessivas até o usuário mudar.
@@ -193,6 +209,17 @@ resultar em mais de um campo — caso contrário o conteúdo bruto é tratado co
   entrar só nessa função.
 - `BarcodeDetector` depende de Google Play Services no Android — funciona no Chrome real de Android, mas
   **não** em Chromium headless genérico (por isso os testes sempre fazem stub, ver seção Testes).
+- **Descarte de leitura cortada na borda** (`codigoTocaBorda()`): toda detecção do detector nativo (câmera
+  e galeria) é checada contra o `boundingBox` que a própria API devolve — se a caixa encostar na borda do
+  frame (margem de `MARGEM_BORDA_FRACAO = 0.02`, 2% da largura/altura), a leitura é descartada em silêncio,
+  igual às outras checagens de ruído (padrão de patrimônio, decoy do CDJE). Motivo: um código de barras
+  parcialmente fora do quadro pode, em formatos lineares mais fracos (ex.: ITF, sem checksum obrigatório),
+  ainda assim decodificar — só que como um valor menor/diferente do código inteiro, não como falha. Isso foi
+  identificado em testes de campo como causa de leituras do mesmo código físico saindo com numerações
+  diferentes. `boundingBox` só existe no resultado do detector nativo — jsQR (fallback, só QR) não fornece
+  essa informação nesse formato e nem precisa, já que QR tem correção de erro própria; por isso
+  `codigoTocaBorda()` retorna `false` (não bloqueia) quando `boundingBox` está ausente — **fail-open**,
+  pra não quebrar o fallback nem os stubs de teste que não simulam essa propriedade.
 
 ## Câmera: falha ao iniciar
 
@@ -270,6 +297,10 @@ Sempre validar, no mínimo, antes de considerar uma mudança pronta:
    ao campo `CDJE` desse QR também é ignorado (continua aguardando CB de verdade); código de barras lido
    **com** QR pendente e valor fora do padrão `PADRAO_PATRIMONIO` (ex.: 11 dígitos, ou não começando com
    `4551`) também é ignorado, tanto vindo da câmera quanto da galeria.
+2b. Descarte por borda (`codigoTocaBorda`): uma detecção com `boundingBox` encostando na margem do frame
+   (câmera ou galeria) é ignorada mesmo que o valor decodificado bata com o padrão de patrimônio; uma
+   detecção sem `boundingBox` (stub de teste, ou navegador que não populou essa propriedade) não é
+   bloqueada por essa checagem (fail-open).
 3. Deduplicação por tipo (câmera): mesmo código repetido em sequência na câmera conta 1 vez; código
    diferente interrompe a repetição e volta a contar normalmente depois.
 4. Deduplicação não se aplica entre fotos da galeria: duas fotos distintas de um lote com o mesmo valor de
@@ -283,7 +314,9 @@ Sempre validar, no mínimo, antes de considerar uma mudança pronta:
 7. Modo Inventário — filtros de aceitação: um `qr_code` é sempre ignorado, mesmo com conteúdo que pareça
    um patrimônio válido; um código de barras fora do padrão `4551` + 6 dígitos é ignorado; e um código já
    lido nesta sessão é descartado mesmo vindo de origem diferente (câmera depois de galeria, ou vice-versa)
-   ou bem depois da primeira leitura (não é um dedup de curto prazo).
+   ou bem depois da primeira leitura (não é um dedup de curto prazo); um código com 1 ou 2 dígitos
+   diferentes do **último** aceito é descartado (decode ruidoso do mesmo físico), mas um código bem
+   diferente do último (mesmo que perto de um item aceito bem antes na sessão) é aceito normalmente.
 8. Nome do arquivo exportado no Inventário: contém a opção selecionada e a nota atual (sanitizadas), na
    ordem `Inventário_<Opção>_<Nota>_<timestamp>.csv`, com o segmento da nota omitido quando ela está vazia.
 9. Conteúdo exato do CSV baixado (`page.expect_download()`) — cabeçalho, separador, ordem das colunas.
