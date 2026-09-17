@@ -17,6 +17,30 @@ Ao propor qualquer mudança, prefira sempre a solução mais simples que resolve
 usado em todo o histórico do projeto, não frameworks, não build step, não dependência nova salvo
 necessidade real.
 
+## Documentação do projeto
+
+Três arquivos, três públicos diferentes — não misture o conteúdo entre eles:
+
+- **`CLAUDE.md`** (este arquivo): para quem mexe no código (humano ou agente). Regras de negócio, decisões
+  de design e por que elas existem.
+- **`README.md`**: visão geral rápida do repositório — o que é, link do site, como fazer deploy.
+- **`MANUAL.md`**: manual de uso em português simples, para a equipe operacional (Polo 24) que escaneia as
+  urnas/baterias/patrimônios no campo. Sem jargão de código. Ao mudar qualquer regra de negócio que afete o
+  que o usuário vê ou precisa fazer (novo campo, nova validação, novo nome de arquivo, etc.), atualize o
+  `MANUAL.md` também — ele descreve o comportamento atual, não pode ficar defasado igual ao `CLAUDE.md`
+  antigo já ficou uma vez (ver git log: foi apagado e recriado).
+
+## Deploy
+
+Hospedado via **GitHub Pages**, servindo o `index.html` da branch `master` do repositório
+`jofilho71/leitor-qrcodes-android`. **Um commit local não atualiza o site sozinho** — é preciso
+`git push origin master` explicitamente. Isso já causou confusão real: um commit (`v6`) ficou só local por
+um tempo enquanto o link público continuava servindo a versão anterior. Ao terminar uma mudança que o
+usuário vai querer ver no ar, **pergunte se deve dar push** (é uma ação visível publicamente, não local) —
+não empurre por padrão, mas não deixe de avisar que o commit sozinho não é suficiente. Depois do push, o
+GitHub Pages leva 1–2 minutos para reconstruir; oriente a aguardar e recarregar com cache limpo
+(Ctrl+Shift+R) se a página parecer não ter mudado.
+
 ## Modos de operação
 
 O app tem dois modos, alternados por um segmented control no topo (`data-modo="bateria"` /
