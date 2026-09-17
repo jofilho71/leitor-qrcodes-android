@@ -115,6 +115,18 @@
   .status-bar .barra { height: 3px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; }
   .status-bar .barra i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width .2s ease; }
 
+  .lista-inventario {
+    display: none;
+    margin-top: 8px; padding: 6px 10px; border-radius: 8px;
+    background: var(--bg-panel); border: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12px;
+    max-height: 160px; overflow-y: auto;
+  }
+  .lista-inventario .item { display: flex; gap: 6px; padding: 3px 0; }
+  .lista-inventario .item .ordem { color: var(--ink-dim); flex: none; }
+  .lista-inventario .item .codigo { overflow-wrap: anywhere; }
+  body.camera-ativa .lista-inventario { flex: none; max-height: 25vh; }
+
   .rodape {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 8px 14px; border-top: 1px solid var(--line); background: var(--bg-panel);
@@ -130,7 +142,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT &amp; BAT - Polo 24 (v 0.5)</span>
+    <span class="titulo-mini">Leitor PAT &amp; BAT - Polo 24 (v 0.6)</span>
     <div class="seg-modo">
       <button type="button" data-modo="bateria" class="ativo">Bateria</button>
       <button type="button" data-modo="inventario">Inventário</button>
@@ -176,6 +188,8 @@
     <span id="status-texto">Processando…</span>
     <div class="barra"><i id="status-fill"></i></div>
   </div>
+
+  <div class="lista-inventario" id="lista-inventario"></div>
 </main>
 
 <footer class="rodape" id="rodape">
@@ -212,6 +226,7 @@
   const statusTexto = document.getElementById("status-texto");
   const statusFill = document.getElementById("status-fill");
   const contadorTexto = document.getElementById("contador-texto");
+  const listaInventario = document.getElementById("lista-inventario");
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const btnCsv = document.getElementById("btn-csv");
@@ -235,7 +250,7 @@
   let intervaloId = null;
   const INTERVALO_MS = 320;
 
-  const ultimoCodigo = { qr: null, pat: null, generico: null };
+  const ultimoCodigo = { qr: null, pat: null };
   // confirmação por repetição: só câmera ao vivo + modo Bateria, evita descasar par ao
   // virar a câmera acidentalmente para o par vizinho (ver CLAUDE.md)
   const LIMIAR_CONFIRMACAO_CAMERA = window.__LIMIAR_CONFIRMACAO_CAMERA_OVERRIDE || 3;
@@ -243,10 +258,17 @@
   function resetarUltimosCodigos() {
     ultimoCodigo.qr = null;
     ultimoCodigo.pat = null;
-    ultimoCodigo.generico = null;
     candidato.qr = null;
     candidato.pat = null;
   }
+
+  // padrão de patrimônio aceito no modo Inventário: 10 dígitos, sempre começando com 4551
+  const PADRAO_PATRIMONIO_INVENTARIO = /^4551\d{6}$/;
+  // patrimônios já registrados no Inventário nesta sessão — nunca duplica, mesmo entre
+  // câmera e galeria ou entre leituras bem espaçadas no tempo (não é um dedup de frame
+  // contínuo como o de ultimoCodigo/candidato acima, por isso vive fora de resetarUltimosCodigos
+  // e só é zerado quando os resultados também são: troca de modo e botão Limpar)
+  let codigosInventarioVistos = new Set();
 
   // pareamento QR <-> código de barras (PAT_UE) — só no modo Bateria
   // única ordem aceita é QR -> CB; um CB sem QR pendente nunca vira pendência (ver CLAUDE.md)
@@ -301,6 +323,7 @@
       pararCamera();
       limparPendencia();
       resultados = [];
+      codigosInventarioVistos.clear();
       resetarUltimosCodigos();
       atualizarContador();
     });
@@ -342,6 +365,28 @@
     const ok = resultados.filter(r => r.ok).length;
     const rotulo = modoAtual === "bateria" ? "Pares" : "Itens";
     contadorTexto.innerHTML = `${rotulo} coletados: <b>${ok}</b>`;
+    atualizarListaInventario();
+  }
+
+  // escapa o conteúdo lido antes de injetar via innerHTML: o valor vem direto do
+  // QR/código de barras (não é texto confiável) e pode conter caracteres de marcação
+  function escaparHtml(valor) {
+    return String(valor ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  // lista os patrimônios do modo Inventário na ordem de leitura; a numeração segue
+  // a mesma ordem das linhas do CSV (só itens ok entram em ambos)
+  function atualizarListaInventario() {
+    if (modoAtual !== "inventario") { listaInventario.style.display = "none"; return; }
+    const itensOk = resultados.filter(r => r.ok);
+    if (!itensOk.length) { listaInventario.style.display = "none"; listaInventario.innerHTML = ""; return; }
+    listaInventario.innerHTML = itensOk.map((r, i) =>
+      `<div class="item"><span class="ordem">${i + 1}.</span><span class="codigo">${escaparHtml(r.codigo)}</span></div>`
+    ).join("");
+    listaInventario.style.display = "block";
+    listaInventario.scrollTop = listaInventario.scrollHeight;
   }
 
   function limparPendencia() {
@@ -352,8 +397,10 @@
   // ---------- roteamento por modo de cada código detectado ----------
   function processarCodigoDetectado(codigo, origem) {
     if (modoAtual === "inventario") {
-      if (ultimoCodigo.generico === codigo.rawValue) return; // repetição do último lido: ignora
-      ultimoCodigo.generico = codigo.rawValue;
+      if (codigo.format === "qr_code") return; // só lê código de barras nesse modo, QR é ignorado
+      if (!PADRAO_PATRIMONIO_INVENTARIO.test(codigo.rawValue)) return; // fora do padrão: ignora
+      if (codigosInventarioVistos.has(codigo.rawValue)) return; // já lido nesta sessão: descarta
+      codigosInventarioVistos.add(codigo.rawValue);
       const opcao = selectOpcao.value;
       const nota = textoLivre.value.trim();
       registrar({ codigo: codigo.rawValue, opcao, nota, ok: true });
@@ -366,7 +413,11 @@
     // um CB lido sem QR pendente é sempre ignorado, em silêncio (ver CLAUDE.md)
     const tipo = codigo.format === "qr_code" ? "qr" : "pat";
     if (tipo === "pat" && !pendente.qr) return;
-    if (ultimoCodigo[tipo] === codigo.rawValue) return; // repetição do último código desse tipo: ignora
+    // mesmo motivo do modo Inventário: esse dedup existe pra não reprocessar o mesmo frame da
+    // câmera repetidas vezes, então não se aplica a fotos distintas da galeria — um código de
+    // barras igual ao da foto anterior (etiqueta com erro de impressão/duplicada) é um item
+    // diferente e precisa parear com o próprio QR, não ser silenciosamente descartado
+    if (origem === "câmera" && ultimoCodigo[tipo] === codigo.rawValue) return;
 
     if (origem === "câmera") {
       // exige leituras sucessivas do mesmo código antes de aceitar como novo, pra reduzir
@@ -441,6 +492,9 @@
       s.onerror = () => reject(new Error("sem conexão para carregar biblioteca de apoio"));
       document.head.appendChild(s);
     });
+    // se falhar (rede indisponível no momento), não guarda a rejeição em cache — senão uma
+    // queda de conexão pontual trava o fallback pro resto da sessão, mesmo com internet de volta
+    jsQRCarregado.catch(() => { jsQRCarregado = null; });
     return jsQRCarregado;
   }
 
@@ -468,6 +522,14 @@
     return { w, h };
   }
 
+  // decodifica o canvas (já desenhado pelo chamador) via jsQR — compartilhado entre galeria e
+  // câmera pra não duplicar o trio getImageData/jsQR/montagem do resultado nos dois lugares
+  function decodificarCanvasComJsQR(w, h) {
+    const dados = ctx.getImageData(0, 0, w, h);
+    const resultado = window.jsQR(dados.data, w, h);
+    return resultado && resultado.data ? [{ rawValue: resultado.data, format: "qr_code" }] : [];
+  }
+
   async function detectarCodigosEmImagem(img) {
     if ("BarcodeDetector" in window) {
       const detector = await obterDetectorNativo();
@@ -486,9 +548,8 @@
       await garantirJsQR();
       for (const escala of [1, 0.5, 1.5]) {
         const { w, h } = desenharEmCanvas(img, escala);
-        const dados = ctx.getImageData(0, 0, w, h);
-        const resultado = window.jsQR(dados.data, w, h);
-        if (resultado && resultado.data) return [{ rawValue: resultado.data, format: "qr_code" }];
+        const codigos = decodificarCanvasComJsQR(w, h);
+        if (codigos.length) return codigos;
       }
     } catch (e) { /* sem internet e sem suporte nativo */ }
     return [];
@@ -551,7 +612,18 @@
       return;
     }
     video.srcObject = streamAtivo;
-    await video.play().catch(() => {});
+    try {
+      await video.play();
+    } catch (e) {
+      // sem isso, um play() rejeitado (ex.: restrição de autoplay em WebView) deixava a UI
+      // da câmera "ativa" com o vídeo congelado, sem detectar nada e sem aviso nenhum
+      streamAtivo.getTracks().forEach(t => t.stop());
+      streamAtivo = null;
+      video.srcObject = null;
+      erroCamera.textContent = "Câmera indisponível: falha ao iniciar o vídeo (" + (e.message || e.name || "erro desconhecido") + ").";
+      erroCamera.style.display = "block";
+      return;
+    }
     cameraWrap.style.display = "block";
     document.body.classList.add("camera-ativa");
     btnCamera.classList.add("ativo");
@@ -575,9 +647,7 @@
           if (w && h) {
             canvas.width = w; canvas.height = h;
             ctx.drawImage(video, 0, 0, w, h);
-            const dados = ctx.getImageData(0, 0, w, h);
-            const resultado = window.jsQR(dados.data, w, h);
-            if (resultado && resultado.data) codigos = [{ rawValue: resultado.data, format: "qr_code" }];
+            codigos = decodificarCanvasComJsQR(w, h);
           }
         }
         for (const codigo of codigos) {
@@ -621,10 +691,12 @@
   btnCamera.addEventListener("click", () => { if (streamAtivo) pararCamera(); else iniciarCamera(); });
 
   // ================= EXPORTAR / LIMPAR =================
+  // os dois únicos delimitadores usados nos CSVs exportados (bateria usa "," e inventário usa
+  // ";") — regex pré-compilada em vez de montar uma nova a cada célula de cada linha exportada
+  const RE_CSV_ESPECIAL = { ",": /["\n,]/, ";": /["\n;]/ };
   function escaparCsv(valor, delimitador) {
     const s = String(valor ?? "");
-    const re = new RegExp(`["${delimitador}\\n]`);
-    if (re.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    if (RE_CSV_ESPECIAL[delimitador].test(s)) return '"' + s.replace(/"/g, '""') + '"';
     return s;
   }
 
@@ -659,8 +731,21 @@
     return "\uFEFF" + linhas.join("\r\n");
   }
 
+  // remove caracteres inválidos em nome de arquivo (a nota é texto livre do usuário)
+  function sanitizarNomeArquivo(valor) {
+    return String(valor).replace(/[\\/:*?"<>|]+/g, "-").trim();
+  }
+
   function gerarNomeArquivo() {
     const carimbo = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    if (modoAtual === "inventario") {
+      const opcao = sanitizarNomeArquivo(selectOpcao.value);
+      const nota = sanitizarNomeArquivo(textoLivre.value.trim());
+      const partes = ["Inventário", opcao];
+      if (nota) partes.push(nota);
+      partes.push(carimbo);
+      return partes.join("_") + ".csv";
+    }
     return `${modoAtual}_${carimbo}.csv`;
   }
 
@@ -710,6 +795,7 @@
 
   btnLimpar.addEventListener("click", () => {
     resultados = [];
+    codigosInventarioVistos.clear();
     resetarUltimosCodigos();
     limparPendencia();
     atualizarContador();
