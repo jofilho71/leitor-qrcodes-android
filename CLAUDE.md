@@ -80,13 +80,30 @@ o arquivo normalmente.
 ### Modo Inventário
 Mais simples: não pareia nada, mas tem regras próprias de aceitação bem mais restritas que o modo Bateria:
 
-- **Só lê código de barras** — qualquer detecção com `codigo.format === "qr_code"` é ignorada de imediato,
-  antes de qualquer outra checagem.
-- **Só aceita o padrão de patrimônio da empresa**: `PADRAO_PATRIMONIO = /^4551\d{6}$/` (constante
-  compartilhada com o `PAT_UE` do modo Bateria, ver seção "Modo Bateria") — 10 dígitos numéricos, sempre
-  começando com `4551`. Qualquer código de barras fora desse padrão (outro formato de etiqueta, código de
-  outro sistema, leitura ruidosa) é ignorado em silêncio, sem virar linha de erro. Se a numeração real do
-  patrimônio mudar de prefixo/tamanho um dia, é só ajustar essa regex (afeta os dois modos).
+- **Só lê QR Code** — qualquer detecção com `codigo.format !== "qr_code"` (ou seja, o código de barras da
+  urna) é ignorada de imediato, antes de qualquer outra checagem. **Essa é a inversão de uma decisão
+  anterior**: até a v0.9 este modo só lia código de barras e ignorava QR; a mudança veio porque o código de
+  barras linear da urna não tem correção de erro (só um dígito verificador simples, quando tem), e testes
+  de campo mostraram o mesmo código físico saindo com dígitos trocados entre tentativas — daí toda a bateria
+  de heurísticas de ruído que já existia nesta seção (padrão, diff contra o último aceito). O QR ao lado do
+  código de barras na mesma etiqueta é o **QR oficial do TSE** para patrimônio de urna (conteúdo no formato
+  `APLC:TSE APLF:QRC.PATR VERE:... TPEQ:UE MDEQ:... IDEQ:<8 dígitos>`) e tem correção de erro Reed-Solomon
+  própria — resolve o problema de ruído na raiz em vez de só filtrar depois.
+- **Extrai o patrimônio do campo `IDEQ` do QR**: usa `parsearCampos()` (a mesma função de parsing
+  `CHAVE:VALOR` do modo Bateria, ver seção "Parsing do conteúdo do QR") no `rawValue` do QR. Um QR sem
+  campo `IDEQ` (QR de outro tipo, mal enquadrado, etc.) é ignorado em silêncio — não é o QR de patrimônio
+  esperado.
+- **O patrimônio real é `"45" + IDEQ`** — único lugar do app que transforma o valor lido antes de gravar
+  (ver exceção na seção "Formatos de CSV"). Essa relação (`PAT_UE` = `"45"` + 8 dígitos do `IDEQ`, sempre
+  batendo com `4551\d{6}`, logo o `IDEQ` sempre começa com `"51"`) foi confirmada pelo usuário comparando o
+  `IDEQ` de um QR com o `PAT_UE` real da mesma urna, não é suposição — mas só está checada pra esse
+  processo de negócio específico (patrimônio de urna do TSE); não generalize esse prefixo pra outro contexto
+  sem confirmação equivalente.
+- **Só aceita o padrão de patrimônio da empresa** depois de montado: `PADRAO_PATRIMONIO = /^4551\d{6}$/`
+  (constante compartilhada com o `PAT_UE` do modo Bateria, ver seção "Modo Bateria") — 10 dígitos numéricos,
+  sempre começando com `4551`. Um valor `"45" + IDEQ` fora desse padrão é ignorado em silêncio, sem virar
+  linha de erro. Se a numeração real do patrimônio mudar de prefixo/tamanho um dia, é só ajustar essa regex
+  (afeta os dois modos).
 - **Nunca duplica um patrimônio na mesma sessão**: `codigosInventarioVistos` (um `Set`) guarda todo código
   já aceito; uma leitura repetida — de qualquer origem (câmera ou galeria), a qualquer momento, não só a
   leitura imediatamente anterior — é descartada em silêncio. Esse Set **não é resetado** junto com
@@ -95,15 +112,15 @@ Mais simples: não pareia nada, mas tem regras próprias de aceitação bem mais
   necessidade de confirmação-por-repetição na câmera: como o próprio código já registrado vira duplicata
   descartada, frames repetidos do mesmo patrimônio já são tratados corretamente sem lógica extra.
 - **Descarte por diferença pequena do último aceito** (`ultimoPatrimonioAceito` +
-  `diferencaPequena(a, b, limite)`, `LIMITE_DIFERENCA_PATRIMONIO = 2`): decode ruidoso do mesmo código
-  físico às vezes produz um valor diferente do último aceito mas ainda dentro do padrão de patrimônio
-  (poucos dígitos trocados, mesmo comprimento) — foi observado em campo o mesmo código de barras saindo
-  com números como `4551265139`/`4551265239`/`4551265269` em leituras sucessivas. Uma leitura com 1 ou 2
-  caracteres diferentes do **último patrimônio aceito** (não do histórico inteiro — esse é o papel do
-  `codigosInventarioVistos`, que é um dedup exato) é descartada em silêncio, mesma lógica de "ruído,
-  ignora e continua" das outras checagens desta seção. `ultimoPatrimonioAceito` só é atualizado quando um
-  código é de fato aceito, e só é zerado junto com `codigosInventarioVistos`: troca de modo e botão
-  Limpar (não é resetado por reinício de câmera/lote de galeria, mesma vida útil do Set).
+  `diferencaPequena(a, b, limite)`, `LIMITE_DIFERENCA_PATRIMONIO = 2`): essa checagem é herdada da época em
+  que o modo lia código de barras direto e existia pra pegar decode ruidoso do mesmo código físico saindo
+  com números como `4551265139`/`4551265239`/`4551265269` em leituras sucessivas. Com a leitura vindo do
+  QR (que tem correção de erro própria), esse ruído específico deve ser bem mais raro, mas a checagem foi
+  mantida como segunda camada de segurança — compara o valor já montado (`"45" + IDEQ`) com o **último
+  patrimônio aceito** (não do histórico inteiro — esse é o papel do `codigosInventarioVistos`, que é um
+  dedup exato) e descarta em silêncio se diferirem em só 1 ou 2 caracteres. `ultimoPatrimonioAceito` só é
+  atualizado quando um código é de fato aceito, e só é zerado junto com `codigosInventarioVistos`: troca
+  de modo e botão Limpar (não é resetado por reinício de câmera/lote de galeria, mesma vida útil do Set).
   **Risco conhecido e aceito**: se a numeração de patrimônio for sequencial (dois itens genuinamente
   diferentes lidos em sequência, com números vizinhos, ex. `...269` depois `...270`), essa checagem pode
   descartar por engano o segundo item por engano — nesse caso, uma segunda leitura (ela já não vai mais
@@ -164,7 +181,11 @@ Os dois modos exportam formatos **diferentes e específicos** — não unifique:
   Falhas **não** geram linha aqui (só contam no rodapé e ficam fora da lista em tela).
 - Removido por pedido explícito: coluna `arquivo`/nome de arquivo — não reintroduzir sem pedido novo.
 - O valor de patrimônio/código de barras é sempre o `rawValue` bruto do detector, **nunca** com prefixo,
-  sufixo ou qualquer transformação.
+  sufixo ou qualquer transformação — **única exceção**: o patrimônio do modo Inventário, que é extraído do
+  campo `IDEQ` do QR e prefixado com `"45"` antes de gravar (ver seção "Modo Inventário"). Essa
+  transformação existe porque o valor de negócio (`PAT_UE`) não é o `rawValue` do QR inteiro, é um campo
+  específico dele reconstruído numa convenção já confirmada com o usuário — não é um precedente pra
+  transformar valores lidos em outros contextos.
 - `escaparCsv()` usa regex pré-compiladas por delimitador (`RE_CSV_ESPECIAL`) — os dois delimitadores
   usados no app são `,` e `;`; se um dia precisar de um terceiro, adicione a entrada no mapa em vez de
   voltar a montar `RegExp` dinamicamente por célula.
@@ -185,9 +206,11 @@ Os dois modos exportam formatos **diferentes e específicos** — não unifique:
 ## Parsing do conteúdo do QR
 
 O QR das etiquetas segue o padrão `CHAVE:VALOR CHAVE:VALOR ...` (ex.: `CDJE:92005320367483
-FORN:POSITIVO...`). `parsearCampos()` faz esse split por espaço, tratando um token como nova chave
-quando tem até 6 caracteres maiúsculos/dígitos seguidos de `:`. Só é considerado um QR estruturado se
-resultar em mais de um campo — caso contrário o conteúdo bruto é tratado como texto solto.
+FORN:POSITIVO...` no modo Bateria; `APLC:TSE APLF:QRC.PATR VERE:... TPEQ:UE MDEQ:... IDEQ:...` no QR de
+patrimônio de urna do TSE, usado no modo Inventário). `parsearCampos()` faz esse split por espaço,
+tratando um token como nova chave quando tem até 6 caracteres maiúsculos/dígitos seguidos de `:`. Só é
+considerado um QR estruturado se resultar em mais de um campo — caso contrário o conteúdo bruto é tratado
+como texto solto. É a mesma função usada pelos dois modos — não duplique essa lógica de parsing.
 
 ## Detecção de código
 
@@ -311,11 +334,12 @@ Sempre validar, no mínimo, antes de considerar uma mudança pronta:
    Inventário, com retorno ao estado correto depois do 1s.
 6. Modo Inventário: com e sem nota, opção correta no CSV, e a lista em tela (`#lista-inventario`)
    numerada na mesma ordem das linhas do CSV.
-7. Modo Inventário — filtros de aceitação: um `qr_code` é sempre ignorado, mesmo com conteúdo que pareça
-   um patrimônio válido; um código de barras fora do padrão `4551` + 6 dígitos é ignorado; e um código já
-   lido nesta sessão é descartado mesmo vindo de origem diferente (câmera depois de galeria, ou vice-versa)
-   ou bem depois da primeira leitura (não é um dedup de curto prazo); um código com 1 ou 2 dígitos
-   diferentes do **último** aceito é descartado (decode ruidoso do mesmo físico), mas um código bem
+7. Modo Inventário — filtros de aceitação: um código de barras (qualquer `format !== "qr_code"`) é sempre
+   ignorado, mesmo com valor que pareça um patrimônio válido; um QR sem campo `IDEQ` é ignorado; um QR com
+   `IDEQ` cujo `"45" + IDEQ` fica fora do padrão `4551` + 6 dígitos é ignorado; e um patrimônio já
+   construído e lido nesta sessão é descartado mesmo vindo de origem diferente (câmera depois de galeria,
+   ou vice-versa) ou bem depois da primeira leitura (não é um dedup de curto prazo); um patrimônio com 1 ou
+   2 dígitos diferentes do **último** aceito é descartado (decode ruidoso do mesmo físico), mas um bem
    diferente do último (mesmo que perto de um item aceito bem antes na sessão) é aceito normalmente.
 8. Nome do arquivo exportado no Inventário: contém a opção selecionada e a nota atual (sanitizadas), na
    ordem `Inventário_<Opção>_<Nota>_<timestamp>.csv`, com o segmento da nota omitido quando ela está vazia.

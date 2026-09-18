@@ -142,7 +142,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT &amp; BAT - Polo 24 (v 0.9)</span>
+    <span class="titulo-mini">Leitor PAT &amp; BAT - Polo 24 (v 0.10)</span>
     <div class="seg-modo">
       <button type="button" data-modo="bateria" class="ativo">Bateria</button>
       <button type="button" data-modo="inventario">Inventário</button>
@@ -263,7 +263,8 @@
   }
 
   // padrão de patrimônio da empresa: 10 dígitos, sempre começando com 4551 — vale tanto pro
-  // código de barras avulso do Inventário quanto pro PAT_UE pareado no modo Bateria (ver CLAUDE.md)
+  // patrimônio construído a partir do QR no Inventário quanto pro PAT_UE pareado no modo
+  // Bateria (ver CLAUDE.md)
   const PADRAO_PATRIMONIO = /^4551\d{6}$/;
   // patrimônios já registrados no Inventário nesta sessão — nunca duplica, mesmo entre
   // câmera e galeria ou entre leituras bem espaçadas no tempo (não é um dedup de frame
@@ -345,7 +346,7 @@
     });
   });
 
-  // ---------- parsing dos campos CHAVE:VALOR (do conteúdo do QR, modo Bateria) ----------
+  // ---------- parsing dos campos CHAVE:VALOR (do conteúdo do QR — usado nos dois modos) ----------
   function parsearCampos(texto) {
     const campos = {};
     const partes = texto.split(/\s+/).filter(Boolean);
@@ -413,18 +414,28 @@
   // ---------- roteamento por modo de cada código detectado ----------
   function processarCodigoDetectado(codigo, origem) {
     if (modoAtual === "inventario") {
-      if (codigo.format === "qr_code") return; // só lê código de barras nesse modo, QR é ignorado
-      if (!PADRAO_PATRIMONIO.test(codigo.rawValue)) return; // fora do padrão: ignora
-      if (codigosInventarioVistos.has(codigo.rawValue)) return; // já lido nesta sessão: descarta
+      // só lê QR Code nesse modo — o código de barras da urna é ignorado por completo (ver
+      // CLAUDE.md: QR tem correção de erro própria, código de barras linear não, e testes de
+      // campo mostraram o barcode saindo com dígitos trocados entre tentativas do mesmo físico)
+      if (codigo.format !== "qr_code") return;
+      const campos = parsearCampos(codigo.rawValue);
+      // QR sem campo IDEQ não é o QR de patrimônio da urna (ex.: outro QR qualquer na mesma
+      // cena) — ignora em silêncio, mesma lógica de "ruído, ignora e continua" das outras checagens
+      if (!campos.IDEQ) return;
+      // o patrimônio real é "45" + IDEQ (confirmado contra o valor já conhecido da mesma urna;
+      // ver CLAUDE.md) — único ponto do app que transforma o valor lido antes de gravar
+      const patrimonio = "45" + campos.IDEQ;
+      if (!PADRAO_PATRIMONIO.test(patrimonio)) return; // fora do padrão: ignora
+      if (codigosInventarioVistos.has(patrimonio)) return; // já lido nesta sessão: descarta
       // decode ruidoso do mesmo código físico pode gerar um valor diferente mas ainda dentro do
       // padrão (poucos dígitos trocados) — compara só com o último aceito, não com todo o
       // histórico, pra não bloquear um patrimônio genuinamente novo só por coincidência de dígitos
-      if (diferencaPequena(codigo.rawValue, ultimoPatrimonioAceito, LIMITE_DIFERENCA_PATRIMONIO)) return;
-      codigosInventarioVistos.add(codigo.rawValue);
-      ultimoPatrimonioAceito = codigo.rawValue;
+      if (diferencaPequena(patrimonio, ultimoPatrimonioAceito, LIMITE_DIFERENCA_PATRIMONIO)) return;
+      codigosInventarioVistos.add(patrimonio);
+      ultimoPatrimonioAceito = patrimonio;
       const opcao = selectOpcao.value;
       const nota = textoLivre.value.trim();
-      registrar({ codigo: codigo.rawValue, opcao, nota, ok: true });
+      registrar({ codigo: patrimonio, opcao, nota, ok: true });
       piscarMoldura("completo");
       mostrarParIncluido();
       return;

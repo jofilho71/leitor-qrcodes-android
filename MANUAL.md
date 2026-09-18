@@ -83,9 +83,11 @@ novo a cada leitura, só se a categoria mudar no meio da coleta.
 ### Como ler
 
 - Toque em **Câmera** ou **Galeria**, igual ao modo Bateria.
-- **Só código de barras é lido — QR code é ignorado nesse modo.**
-- **Só patrimônios no padrão correto são aceitos** (números de 10 dígitos começando com `4551`). Qualquer
-  outro código de barras é ignorado, sem aviso de erro.
+- **Só QR code é lido — código de barras é ignorado nesse modo.** Aponte para o QR code que fica ao lado
+  do código de barras na etiqueta da urna, não para o código de barras.
+- O app lê o número de patrimônio de dentro do QR (não precisa mais mirar no código de barras, que é mais
+  sujeito a erro de leitura). **Só patrimônios no padrão correto são aceitos** (equivalente a 10 dígitos
+  começando com `4551`). Qualquer QR sem essa informação, ou fora do padrão, é ignorado, sem aviso de erro.
 - **Um mesmo patrimônio nunca é contado duas vezes** na mesma coleta — se por engano você passar a câmera
   de novo sobre um código já lido (ou ler a mesma etiqueta em outra foto da galeria), ele é descartado
   automaticamente. Não precisa se preocupar em escanear "de mais".
