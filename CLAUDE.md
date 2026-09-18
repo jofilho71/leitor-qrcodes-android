@@ -93,17 +93,18 @@ Mais simples: não pareia nada, mas tem regras próprias de aceitação bem mais
   `CHAVE:VALOR` do modo Bateria, ver seção "Parsing do conteúdo do QR") no `rawValue` do QR. Um QR sem
   campo `IDEQ` (QR de outro tipo, mal enquadrado, etc.) é ignorado em silêncio — não é o QR de patrimônio
   esperado.
-- **O patrimônio real é `"45" + IDEQ`** — único lugar do app que transforma o valor lido antes de gravar
-  (ver exceção na seção "Formatos de CSV"). Essa relação (`PAT_UE` = `"45"` + 8 dígitos do `IDEQ`, sempre
-  batendo com `4551\d{6}`, logo o `IDEQ` sempre começa com `"51"`) foi confirmada pelo usuário comparando o
-  `IDEQ` de um QR com o `PAT_UE` real da mesma urna, não é suposição — mas só está checada pra esse
-  processo de negócio específico (patrimônio de urna do TSE); não generalize esse prefixo pra outro contexto
-  sem confirmação equivalente.
-- **Só aceita o padrão de patrimônio da empresa** depois de montado: `PADRAO_PATRIMONIO = /^4551\d{6}$/`
-  (constante compartilhada com o `PAT_UE` do modo Bateria, ver seção "Modo Bateria") — 10 dígitos numéricos,
-  sempre começando com `4551`. Um valor `"45" + IDEQ` fora desse padrão é ignorado em silêncio, sem virar
-  linha de erro. Se a numeração real do patrimônio mudar de prefixo/tamanho um dia, é só ajustar essa regex
-  (afeta os dois modos).
+- **O valor gravado é o `IDEQ` puro, sem transformação** (8 dígitos, ex.: `51432890`) — diferente do
+  `PAT_UE` impresso no código de barras da mesma urna (10 dígitos, `4551432890`). A relação entre os dois
+  (`PAT_UE` = `"45"` + `IDEQ`) foi confirmada pelo usuário comparando o `IDEQ` de um QR real com o `PAT_UE`
+  já conhecido da mesma urna — não é suposição. Uma primeira versão gravava o valor já reconstruído
+  (`"45"+IDEQ`, formato igual ao do barcode); foi revertido a pedido do usuário para gravar o `IDEQ` como
+  veio do QR, sem prefixo — só a validação de padrão (linha abaixo) ainda usa a reconstrução internamente.
+- **Só aceita o padrão de patrimônio da empresa**: a validação reconstrói `"45" + IDEQ` só pra comparar
+  contra `PADRAO_PATRIMONIO = /^4551\d{6}$/` (constante compartilhada com o `PAT_UE` do modo Bateria, ver
+  seção "Modo Bateria") — 10 dígitos numéricos, sempre começando com `4551`; a reconstrução não é gravada,
+  é descartada logo depois da checagem. Um `IDEQ` cujo `"45"+IDEQ` fica fora desse padrão é ignorado em
+  silêncio, sem virar linha de erro. Se a numeração real do patrimônio mudar de prefixo/tamanho um dia, é
+  só ajustar essa regex (afeta os dois modos, e a lógica de reconstrução aqui).
 - **Nunca duplica um patrimônio na mesma sessão**: `codigosInventarioVistos` (um `Set`) guarda todo código
   já aceito; uma leitura repetida — de qualquer origem (câmera ou galeria), a qualquer momento, não só a
   leitura imediatamente anterior — é descartada em silêncio. Esse Set **não é resetado** junto com
@@ -116,7 +117,7 @@ Mais simples: não pareia nada, mas tem regras próprias de aceitação bem mais
   que o modo lia código de barras direto e existia pra pegar decode ruidoso do mesmo código físico saindo
   com números como `4551265139`/`4551265239`/`4551265269` em leituras sucessivas. Com a leitura vindo do
   QR (que tem correção de erro própria), esse ruído específico deve ser bem mais raro, mas a checagem foi
-  mantida como segunda camada de segurança — compara o valor já montado (`"45" + IDEQ`) com o **último
+  mantida como segunda camada de segurança — compara o `IDEQ` gravado (sem prefixo) com o **último
   patrimônio aceito** (não do histórico inteiro — esse é o papel do `codigosInventarioVistos`, que é um
   dedup exato) e descarta em silêncio se diferirem em só 1 ou 2 caracteres. `ultimoPatrimonioAceito` só é
   atualizado quando um código é de fato aceito, e só é zerado junto com `codigosInventarioVistos`: troca
@@ -181,11 +182,12 @@ Os dois modos exportam formatos **diferentes e específicos** — não unifique:
   Falhas **não** geram linha aqui (só contam no rodapé e ficam fora da lista em tela).
 - Removido por pedido explícito: coluna `arquivo`/nome de arquivo — não reintroduzir sem pedido novo.
 - O valor de patrimônio/código de barras é sempre o `rawValue` bruto do detector, **nunca** com prefixo,
-  sufixo ou qualquer transformação — **única exceção**: o patrimônio do modo Inventário, que é extraído do
-  campo `IDEQ` do QR e prefixado com `"45"` antes de gravar (ver seção "Modo Inventário"). Essa
-  transformação existe porque o valor de negócio (`PAT_UE`) não é o `rawValue` do QR inteiro, é um campo
-  específico dele reconstruído numa convenção já confirmada com o usuário — não é um precedente pra
-  transformar valores lidos em outros contextos.
+  sufixo ou qualquer transformação — **única exceção**: o patrimônio do modo Inventário, que não é o
+  `rawValue` inteiro do QR (que traz vários campos, ver seção "Modo Inventário"), e sim só o valor do campo
+  `IDEQ` extraído dele, gravado sem prefixo/sufixo adicional. Uma versão anterior chegou a gravar
+  `"45"+IDEQ` (reconstruindo o formato do `PAT_UE` impresso no barcode); foi revertido a pedido do usuário
+  para gravar o `IDEQ` como veio do QR. A reconstrução `"45"+IDEQ` continua existindo, mas só como valor
+  interno de validação (ver `PADRAO_PATRIMONIO` na seção "Modo Inventário"), nunca gravada.
 - `escaparCsv()` usa regex pré-compiladas por delimitador (`RE_CSV_ESPECIAL`) — os dois delimitadores
   usados no app são `,` e `;`; se um dia precisar de um terceiro, adicione a entrada no mapa em vez de
   voltar a montar `RegExp` dinamicamente por célula.
@@ -336,10 +338,11 @@ Sempre validar, no mínimo, antes de considerar uma mudança pronta:
    numerada na mesma ordem das linhas do CSV.
 7. Modo Inventário — filtros de aceitação: um código de barras (qualquer `format !== "qr_code"`) é sempre
    ignorado, mesmo com valor que pareça um patrimônio válido; um QR sem campo `IDEQ` é ignorado; um QR com
-   `IDEQ` cujo `"45" + IDEQ` fica fora do padrão `4551` + 6 dígitos é ignorado; e um patrimônio já
-   construído e lido nesta sessão é descartado mesmo vindo de origem diferente (câmera depois de galeria,
-   ou vice-versa) ou bem depois da primeira leitura (não é um dedup de curto prazo); um patrimônio com 1 ou
-   2 dígitos diferentes do **último** aceito é descartado (decode ruidoso do mesmo físico), mas um bem
+   `IDEQ` cujo `"45" + IDEQ` fica fora do padrão `4551` + 6 dígitos é ignorado; o valor gravado (na lista em
+   tela e no CSV) é o `IDEQ` puro, sem o prefixo `"45"`; e um `IDEQ` já lido nesta sessão é descartado mesmo
+   vindo de origem diferente (câmera depois de galeria, ou vice-versa) ou bem depois da primeira leitura
+   (não é um dedup de curto prazo); um `IDEQ` com 1 ou 2 dígitos diferentes do **último** aceito é
+   descartado (decode ruidoso do mesmo físico), mas um bem
    diferente do último (mesmo que perto de um item aceito bem antes na sessão) é aceito normalmente.
 8. Nome do arquivo exportado no Inventário: contém a opção selecionada e a nota atual (sanitizadas), na
    ordem `Inventário_<Opção>_<Nota>_<timestamp>.csv`, com o segmento da nota omitido quando ela está vazia.

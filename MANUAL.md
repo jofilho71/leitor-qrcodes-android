@@ -86,8 +86,10 @@ novo a cada leitura, só se a categoria mudar no meio da coleta.
 - **Só QR code é lido — código de barras é ignorado nesse modo.** Aponte para o QR code que fica ao lado
   do código de barras na etiqueta da urna, não para o código de barras.
 - O app lê o número de patrimônio de dentro do QR (não precisa mais mirar no código de barras, que é mais
-  sujeito a erro de leitura). **Só patrimônios no padrão correto são aceitos** (equivalente a 10 dígitos
-  começando com `4551`). Qualquer QR sem essa informação, ou fora do padrão, é ignorado, sem aviso de erro.
+  sujeito a erro de leitura). Esse número tem 8 dígitos (ex.: `51432890`) — é **diferente** do número de 10
+  dígitos impresso junto do código de barras (ex.: `4551432890`), mas representa a mesma urna; a lista em
+  tela e o CSV mostram sempre o número de 8 dígitos do QR, não o do código de barras. Qualquer QR sem essa
+  informação, ou fora do padrão esperado, é ignorado, sem aviso de erro.
 - **Um mesmo patrimônio nunca é contado duas vezes** na mesma coleta — se por engano você passar a câmera
   de novo sobre um código já lido (ou ler a mesma etiqueta em outra foto da galeria), ele é descartado
   automaticamente. Não precisa se preocupar em escanear "de mais".
