@@ -25,7 +25,7 @@ def test_retomar_apos_recarregar(app):
     p.click("#btn-retomar")
     assert p.is_visible("#tela-leitura")
     assert p.inner_text("#codigo-grande") == "Código 48213"
-    assert app.itens() == [["51000001", "STATUS:Defeito"], ["51000002", "STATUS:Defeito"]]
+    assert app.itens() == [["51000001", "STATUS:Defeituosa"], ["51000002", "STATUS:Defeituosa"]]
     assert p.input_value("#select-operacao") == "STATUS"
     assert p.input_value("#select-status") == "Defeito"
     assert p.input_value("#texto-livre") == "lacre 7"

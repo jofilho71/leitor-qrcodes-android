@@ -66,11 +66,13 @@ enquanto o QR continuar à vista (`bloqueioCamera`).
 
 ## Operações e CSV (formato 1)
 
-Operações do app: `TRANSFERIR:Z<n>|POLO`, `EMPRESTAR`, `STATUS:<status>` com status `Laudo`, `Defeito`, `Pronta`.
-**Decisão do usuário (2026-10-11)**: o leitor é o modelo e o ASIdoBem se adapta. `EMPRESTAR`, `Laudo` e `Defeito`
-não constam do contrato original (`IMPORTACAO_WEB.md`); enquanto o ASIdoBem não for atualizado ele recusa essas
-linhas. O pedido de mudança está em `docs/INTEGRACAO_ASIDOBEM.md` (§5). Se o vocabulário mudar de novo, ajuste os
-`<option>` de `#select-operacao`/`#select-status` e esse documento. O índice não valida o vocabulário.
+Operações do app: `TRANSFERIR:Z<n>|POLO`, `EMPRESTAR`, `STATUS:<status>`. Na tela o status é Laudo/Defeito/Pronta, mas o
+valor gravado é o oficial do ASIdoBem: **Defeito → `STATUS:Defeituosa`**, **Laudo → `STATUS:Defeituosa` com a
+descrição `LAUDO`** (ou `LAUDO - <nota>`), Pronta → `STATUS:Pronta` (`STATUS_OFICIAL`, `descricaoAtual`).
+
+**Decisão do usuário (2026-10-11)**: o leitor só emite essas três operações; toda operação do leitor entra no
+ASIdoBem como **plano** (depois efetivado). `EMPRESTAR` não consta do contrato original (`IMPORTACAO_WEB.md`): o
+pedido de mudança ao ASIdoBem está em `docs/INTEGRACAO_ASIDOBEM.md` (§5). O índice não valida o vocabulário.
 
 CSV (Salvar, Compartilhar e o conteúdo publicado são o mesmo, de `montarLista(seq)`): UTF-8 **sem BOM**, `;`,
 `\n`; linha `#ASIDOBEM;formato=1;codigo=…;id=…;titulo=…;gerado_em=…`, cabeçalho

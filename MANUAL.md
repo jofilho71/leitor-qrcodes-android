@@ -18,7 +18,8 @@ Para quem lê as urnas em campo. Sem termos técnicos.
 3. Escolha a **ação**:
    - **Transferir** — a urna vai para outra zona (digite o número, ex.: 59) ou para o polo.
    - **Emprestar** — a urna foi emprestada.
-   - **Status** — escolha **Laudo**, **Defeito** ou **Pronta**. A urna não muda de lugar.
+   - **Status** — escolha **Laudo**, **Defeito** ou **Pronta**. A urna não muda de lugar. (Laudo e Defeito
+     registram a urna como defeituosa; o Laudo acrescenta a marca "LAUDO" na descrição.)
    - Se quiser, escreva uma nota (defeito, lacre…). A operação e a nota valem para as próximas leituras
      até você mudar.
 4. Toque em **Começar leitura** e no botão da **câmera**. Aponte para o QR da urna (o QR do TSE ao lado do

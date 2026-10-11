@@ -125,8 +125,8 @@ def test_operacoes_e_parametros(app):
         ["51000001", "EMPRESTAR"],
         ["51000002", "TRANSFERIR:Z59"],
         ["51000003", "TRANSFERIR:POLO"],
-        ["51000004", "STATUS:Defeito"],
-        ["51000005", "STATUS:Laudo"],
+        ["51000004", "STATUS:Defeituosa"],
+        ["51000005", "STATUS:Defeituosa"],
         ["51000006", "STATUS:Pronta"],
     ]
 
@@ -165,7 +165,7 @@ def test_csv_formato_1(app):
     )
     assert linhas[1] == "patrimonio;operacao;descricao"
     assert linhas[2] == "51000001;EMPRESTAR;Não liga tela apagada"
-    assert linhas[3] == "51000002;STATUS:Laudo;"
+    assert linhas[3] == "51000002;STATUS:Defeituosa;LAUDO"
     assert csv.endswith("\n") and not csv.startswith("﻿")
 
 
@@ -198,3 +198,29 @@ def test_falha_de_play_para_o_stream_e_mostra_erro(app):
     assert "falha ao iniciar o vídeo" in app.page.inner_text("#erro-camera")
     assert app.page.evaluate("document.body.classList.contains('camera-ativa')") is False
     assert app.page.evaluate("document.getElementById('video').srcObject === null") is True
+
+
+def test_laudo_vai_como_defeituosa_com_descricao_laudo(app):
+    lendo(app)
+    p = app.page
+    p.select_option("#select-operacao", "STATUS")
+    p.select_option("#select-status", "Laudo")
+    app.enfileirar([App.det_qr("51000001")])
+    app.esperar_fila()
+    p.fill("#texto-livre", "lacre 7")
+    app.enfileirar([App.det_qr("51000002")])
+    app.esperar_fila()
+    p.select_option("#select-status", "Defeito")
+    app.enfileirar([App.det_qr("51000003")])
+    app.esperar_fila()
+    p.select_option("#select-status", "Pronta")
+    p.fill("#texto-livre", "")
+    app.enfileirar([App.det_qr("51000004")])
+    app.esperar_fila()
+    dados = app.baixar_csv().strip().split("\n")[2:]
+    assert dados == [
+        "51000001;STATUS:Defeituosa;LAUDO",
+        "51000002;STATUS:Defeituosa;LAUDO - lacre 7",
+        "51000003;STATUS:Defeituosa;lacre 7",
+        "51000004;STATUS:Pronta;",
+    ]

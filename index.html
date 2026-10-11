@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.1)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.2)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -340,6 +340,8 @@
   const REPO = "jofilho71/asidobem-listas";
   const API = "https://api.github.com/repos/" + REPO;
   const MAX_LINHAS_PUBLICACAO = 15000;
+  // status mostrados na tela -> status oficial do ASIdoBem (Laudo e Defeito viram Defeituosa)
+  const STATUS_OFICIAL = { Laudo: "Defeituosa", Defeito: "Defeituosa", Pronta: "Pronta" };
   const MAX_BYTES_PUBLICACAO = 5 * 1024 * 1024;
   const RE_TOKEN = /^[A-Za-z0-9_\-]{20,255}$/;
 
@@ -398,8 +400,17 @@
       const destino = normalizarDestino(inputZona.value);
       return destino ? "TRANSFERIR:" + destino : null;
     }
-    if (op === "STATUS") return "STATUS:" + selectStatus.value;
+    if (op === "STATUS") return "STATUS:" + STATUS_OFICIAL[selectStatus.value];
     return op;
+  }
+
+  // a nota digitada; Laudo acrescenta a marca "LAUDO" (o status gravado é o mesmo de Defeito)
+  function descricaoAtual() {
+    const nota = limparDescricao(textoLivre.value);
+    if (selectOperacao.value === "STATUS" && selectStatus.value === "Laudo") {
+      return limparDescricao(nota ? "LAUDO - " + nota : "LAUDO");
+    }
+    return nota;
   }
 
   function atualizarCamposOperacao() {
@@ -632,7 +643,7 @@
     if (!operacao) { inputZona.classList.add("invalido"); return rejeitar(); }
 
     codigosVistos.add(patrimonio);
-    sessao.itens.push({ codigo: patrimonio, operacao, descricao: limparDescricao(textoLivre.value) });
+    sessao.itens.push({ codigo: patrimonio, operacao, descricao: descricaoAtual() });
     salvarSessao();
     atualizarContador();
     sinalizar("sucesso");
