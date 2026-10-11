@@ -148,6 +148,7 @@
   .rodape-botoes { display: flex; gap: 6px; }
   .rodape-botoes .btn-icone { height: 38px; width: 38px; flex: none; }
   .rodape-botoes .btn-icone svg { width: 17px; height: 17px; }
+  #btn-cancelar { margin-right: 14px; }
 </style>
 </head>
 <body>
@@ -241,6 +242,12 @@
 <footer class="rodape" id="rodape" hidden>
   <span class="rodape-contador" id="contador-texto">Itens coletados: 0</span>
   <div class="rodape-botoes">
+    <button class="btn-icone" id="btn-excluir-ultimo" type="button" title="Excluir último">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+    </button>
+    <button class="btn-icone" id="btn-cancelar" type="button" title="Cancelar leitura">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
     <button class="btn-icone" id="btn-csv" type="button" title="Salvar CSV">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 4v5h8V4M8 14h8v6H8v-6Z"/></svg>
     </button>
@@ -299,6 +306,8 @@
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const btnCsv = $("btn-csv");
   const btnCompartilhar = $("btn-compartilhar");
+  const btnExcluirUltimo = $("btn-excluir-ultimo");
+  const btnCancelar = $("btn-cancelar");
 
   const ICONE_CAMERA = iconeCamera.innerHTML;
   const ICONE_PARAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></svg>';
@@ -320,6 +329,9 @@
   let timerErro = null;
   // último IDEQ visto na câmera: frames seguidos do mesmo QR não geram novo sinal de erro
   const recente = { valor: null, visto: 0 };
+  // QR recém-excluído com "Excluir último": a câmera, ainda apontada para ele, não pode readicioná-lo
+  // no frame seguinte. O bloqueio dura enquanto o valor continuar à vista (renovado a cada frame)
+  const bloqueioCamera = { valor: null, visto: 0 };
 
   // ---------- armazenamento local (nunca quebra se estiver bloqueado) ----------
   const LS = {
@@ -510,6 +522,7 @@
     contadorTexto.innerHTML = `Itens coletados: <b>${n}</b>`;
     btnCsv.disabled = !n;
     btnCompartilhar.disabled = !n;
+    btnExcluirUltimo.disabled = !n;
     atualizarLista();
   }
 
@@ -532,6 +545,11 @@
     // QR sem IDEQ não é o QR de patrimônio da urna: ruído de cena, ignora em silêncio
     if (!campos.IDEQ) return;
     const patrimonio = campos.IDEQ;
+    if (origem === "câmera" && bloqueioCamera.valor === patrimonio &&
+        Date.now() - bloqueioCamera.visto < JANELA_REPETIDO_MS) {
+      bloqueioCamera.visto = Date.now();
+      return;
+    }
 
     const agora = Date.now();
     const mesmoFrame = origem === "câmera" && recente.valor === patrimonio && agora - recente.visto < JANELA_REPETIDO_MS;
@@ -796,6 +814,30 @@
   }
 
   btnCamera.addEventListener("click", () => { if (streamAtivo) pararCamera(); else iniciarCamera(); });
+
+  // ---------- excluir último / cancelar ----------
+  btnExcluirUltimo.addEventListener("click", () => {
+    if (!sessao || !sessao.itens.length) return;
+    const item = sessao.itens.pop();
+    codigosVistos.delete(item.codigo);
+    bloqueioCamera.valor = item.codigo;
+    bloqueioCamera.visto = Date.now();
+    atualizarContador();
+  });
+
+  function encerrarSessao() {
+    sessao = null;
+    codigosVistos = new Set();
+    bloqueioCamera.valor = null;
+    recente.valor = null;
+  }
+
+  btnCancelar.addEventListener("click", () => {
+    const n = sessao ? sessao.itens.length : 0;
+    if (n && !window.confirm(`Cancelar a leitura? ${n} item(ns) serão descartados.`)) return;
+    encerrarSessao();
+    irPara("inicio");
+  });
 
   irPara("inicio");
 })();
