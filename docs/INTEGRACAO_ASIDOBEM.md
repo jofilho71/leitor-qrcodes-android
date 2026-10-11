@@ -2,7 +2,7 @@
 
 > Cole/copie este arquivo no repositório do ASIdoBem e abra a sessão pedindo que ele seja lido antes de
 > qualquer coisa. Ele descreve **o outro lado** do contrato `IMPORTACAO_WEB.md` / `IMPORTACAO_SISTEMA.md`:
-> o app que publica as listas. Data: 2026-10-11. Versão do leitor: **v 1.1**.
+> o app que publica as listas. Data: 2026-10-11. Versão do leitor: **v 1.2**.
 
 ## 1. Em uma frase
 
@@ -29,7 +29,7 @@ vocabulário de operações e de status (seção 5): o usuário decidiu que o AS
 #ASIDOBEM;formato=1;codigo=48213;id=2026-10-20-48213-01;titulo=Inventário 20/10;gerado_em=2026-10-20T16:42:05-03:00
 patrimonio;operacao;descricao
 51250523;TRANSFERIR:Z59;nota do técnico
-51250524;STATUS:Defeito;
+51250524;STATUS:Defeituosa;LAUDO
 ```
 - UTF-8 **sem BOM**, separador `;`, fim de linha LF, última linha termina com `\n`, sempre 3 colunas.
 - **Mudanças em relação ao exemplo do contrato**:
@@ -65,50 +65,66 @@ leitor) **valida**: formato 1, `codigo` de 5 dígitos, `id` válido e igual ao n
    duplicada por reenvio**.
 4. Volta ao início para nova configuração. Cada publicação = uma lista nova com id novo.
 
-## 5. Mudanças pedidas ao ASIdoBem (decisão do usuário: o leitor é o modelo; o ASIdoBem se adapta)
+## 5. Mudanças pedidas ao ASIdoBem (decisões do usuário — o leitor é o modelo; o ASIdoBem se adapta)
 
-O usuário decidiu **não** adaptar o leitor ao vocabulário antigo do contrato: **o ASIdoBem e os dois documentos de
-contrato (`IMPORTACAO_WEB.md`, `IMPORTACAO_SISTEMA.md`) devem ser reescritos onde preciso** para refletir o que o
-leitor realmente publica. Pode refazer o que for necessário; não é para preservar compatibilidade com o texto atual
-do §3.4.
+Decisões já tomadas, sem necessidade de nova consulta:
 
-### 5.1 O que o leitor emite hoje (única fonte de `operacao`)
+- **Todas as operações vindas do leitor entram como PLANO** e só depois são efetivadas (confirmação no ASIdoBem),
+  como o contrato já previa para movimentações. Isso passa a valer também para `STATUS` e `EMPRESTAR`.
+- **Vocabulário aceito na importação = só o que o leitor emite** (tabela 5.1). `RECOLHER`, `DEVOLVER_TRE`,
+  `DESCARTAR`, `CADASTRAR` e os demais status saem do vocabulário de importação; linhas assim são recusadas.
+- **Laudo e Defeito não existem como status novos**: o leitor já os converte para o status oficial **`Defeituosa`**
+  (Laudo = `STATUS:Defeituosa` com `descricao` iniciando em `LAUDO`; Defeito = `STATUS:Defeituosa`). Nada a criar
+  no cadastro de status para isso; a `descricao` vai para o complemento do cadastro, como já ocorre em `STATUS`.
 
-| Ação no app | Valor gravado em `operacao` | Estado no contrato atual |
-|---|---|---|
-| Transferir (zona ou polo) | `TRANSFERIR:Z<n>` / `TRANSFERIR:POLO` | já existe |
-| Emprestar | `EMPRESTAR` (sem parâmetro) | **não existe** — o contrato exclui empréstimos de propósito |
-| Status → Pronta | `STATUS:Pronta` | já existe |
-| Status → Defeito | `STATUS:Defeito` | **não existe** (hoje: `Defeituosa`) |
-| Status → Laudo | `STATUS:Laudo` | **não existe** |
+### 5.1 O que o leitor emite (única fonte de `operacao` na importação)
 
-O leitor **não emite mais** `RECOLHER`, `DEVOLVER_TRE`, `DESCARTAR`, `CADASTRAR`, nem os status `Danificada`,
-`Sucateada`, `Nao Certificada`, `Sem Bateria`, `Indisponivel`. Enquanto o ASIdoBem não for atualizado, ele recusa as
-linhas `EMPRESTAR`, `STATUS:Defeito` e `STATUS:Laudo` (as demais linhas da lista seguem normais).
+| Ação no app | `operacao` gravada | `descricao` | Situação no contrato atual |
+|---|---|---|---|
+| Transferir (zona ou polo) | `TRANSFERIR:Z<n>` / `TRANSFERIR:POLO` | nota livre | já existe |
+| Emprestar | `EMPRESTAR` (sem parâmetro) | nota livre (o técnico pode escrever o tomador) | **nova** |
+| Status → Pronta | `STATUS:Pronta` | nota livre | já existe |
+| Status → Defeito | `STATUS:Defeituosa` | nota livre | já existe |
+| Status → Laudo | `STATUS:Defeituosa` | `LAUDO` ou `LAUDO - <nota>` | já existe (a marca vai na descrição) |
 
-### 5.2 O que precisa ser decidido/implementado por lá (junto com o usuário)
+`descricao`: ≤ 200 caracteres, `;`/quebra de linha viram espaço.
 
-1. **`EMPRESTAR` — nova operação.** Definir o efeito. O contrato antigo diz que empréstimo "não move material e o
-   tomador não tem cadastro"; a descrição (`descricao`, ≤ 200 caracteres, texto livre do técnico) é o único lugar
-   onde o leitor registra quem ficou com a urna. Perguntas: gera plano? apenas registro no histórico da urna? muda
-   algum status/local? aparece em algum relatório? O que acontece quando a urna já está emprestada ou está em outro
-   local? Remover do contrato a frase que exclui empréstimos.
-2. **`STATUS:Laudo` — status novo.** Definir o significado (ex.: "aguardando/com laudo") e como ele convive com os
-   demais status e com o histórico.
-3. **`STATUS:Defeito`.** Decidir entre (a) `Defeito` **substituir** `Defeituosa` como status oficial (migrar os
-   cadastros existentes) ou (b) **coexistirem**/ser sinônimos. O leitor só emite `Defeito`.
-4. **`STATUS:Pronta`** e **`TRANSFERIR`** já funcionam como no contrato (conferir que seguem sem regressão).
-5. **Vocabulário geral.** Decidir se `RECOLHER`, `DEVOLVER_TRE`, `DESCARTAR`, `CADASTRAR` e os outros status ficam
-   válidos no ASIdoBem (o leitor atual não os usa, mas listas antigas ou de outros sites podem) ou são removidos.
-   Recomendação do lado do leitor: **manter** como aceitos — não custam nada e não quebram nada —, desde que o
-   contrato deixe claro que o leitor v1.1 só emite as três operações da tabela acima.
-6. **Reescrever os contratos**: §3.4 (vocabulário e a nota sobre empréstimos), a lista de `<status>`, os exemplos
-   (§3.1 e as listas de exemplo, que ainda usam `local=`, `responsavel=`, `RECOLHER`, `Defeituosa`) e o §3.1 para
-   que `local`/`responsavel` fiquem claramente opcionais e raros. Se mudar qualquer coisa do que o leitor grava,
-   **avisar o projeto do leitor** — o ajuste no app é trivial (opções do `<select>` e das constantes em `index.html`).
+### 5.2 `EMPRESTAR` — nova operação (definição do usuário)
 
-Também confirmar com um teste: a ausência de `local`/`responsavel` na linha de identificação não quebra a leitura
-(são opcionais pelo contrato §3.1).
+- Gera um **plano de empréstimo** (como as outras operações), que depois é efetivado.
+- **Efeito ao efetivar**: registra no **histórico da urna** e marca a urna como **Emprestada**. A urna **não muda
+  de local** no cadastro. A devolução é tratada como outra operação, fora deste escopo (hoje o leitor não a emite).
+- Parâmetro necessário: **tomador** (quem fica com a urna). O leitor não envia o tomador como campo; ele deve ser
+  informado **na tela de importação do ASIdoBem** (seção 5.3). A `descricao` do leitor (nota livre) pode já trazer
+  essa informação e deve ser exibida ao lado para o técnico copiar/conferir.
+- A ser definido pela sessão do ASIdoBem junto ao usuário: **"Emprestada"** vira um **status novo** no cadastro
+  (entra na lista de status e nos filtros/relatórios) ou uma marcação separada do status técnico da urna (uma urna
+  pode estar Pronta *e* Emprestada)? Como tratar `EMPRESTAR` sobre uma urna já emprestada (aviso/recusa, como já
+  ocorre com `STATUS` igual ao atual)? Remover do contrato a frase que exclui empréstimos.
+
+### 5.3 Tela de importação — revisar
+
+Pedido do usuário: **revisar a tela de importação** para que, **depois da leitura e da exibição em tela** das linhas
+da lista, seja possível **definir os parâmetros necessários de cada operação** antes de gerar os planos.
+
+- Preenchimento **por linha**, com **preenchimento em lote** (ex.: "aplicar este tomador a todas as linhas
+  `EMPRESTAR`") para agilizar listas longas.
+- Parâmetro hoje identificado: **tomador** para `EMPRESTAR`. Revisar com o usuário se outras operações também se
+  beneficiam de parâmetros editados na tela (por exemplo, confirmar/alterar o destino de `TRANSFERIR`); o leitor
+  continua enviando o destino em `TRANSFERIR:<destino>`, e o que for definido na tela vale a partir dali.
+- Linhas recusadas (padrão inválido, patrimônio repetido, operação fora do vocabulário, urna desconhecida…) seguem
+  exibidas com o motivo, como já no contrato.
+- A `descricao` de cada linha deve aparecer na tela (é a única comunicação livre do técnico de campo).
+
+### 5.4 Reescrever os contratos
+
+Atualizar `IMPORTACAO_WEB.md` e `IMPORTACAO_SISTEMA.md`: §3.4 (vocabulário = 3 operações; status aceitos; a nota
+sobre empréstimos), os exemplos (ainda usam `local=`, `responsavel=`, `RECOLHER`), o §3.1 (`local`/`responsavel`
+continuam opcionais, mas o leitor v1.2 não os envia) e a descrição da tela de importação. Se qualquer coisa do que o
+leitor grava precisar mudar, **avisar o projeto do leitor** — o ajuste no app é pequeno (`<option>` e constantes
+`STATUS_OFICIAL`/`descricaoAtual` em `index.html`).
+
+Confirmar com teste: a ausência de `local`/`responsavel` na linha de identificação não quebra a leitura.
 
 ## 6. Como testar ponta a ponta
 
@@ -116,10 +132,12 @@ Também confirmar com um teste: a ausência de `local`/`responsavel` na linha de
   `qrcodes-teste/lista.txt`). Os patrimônios `512502xx…5125xxxx` são fictícios e **podem não existir no cadastro**
   do ASIdoBem: para testar `TRANSFERIR`/`STATUS` de verdade, cadastre alguns deles na base de teste ou use
   patrimônios reais; os desconhecidos devem ser recusados com o motivo apropriado.
-- Roteiro: publicar uma lista com 1 `TRANSFERIR:Z59`, 1 `TRANSFERIR:POLO`, 1 `STATUS:Pronta`, 1 `EMPRESTAR`,
-  1 `STATUS:Defeito`, 1 `STATUS:Laudo` → no ASIdoBem, *Buscar no site (F5)* → conferir que a lista chega, o SHA-256
-  bate e **todas as seis linhas** são aceitas com o efeito definido na seção 5.2 (antes da mudança, as três
-  últimas são recusadas — use isso como teste de regressão "antes/depois").
+- Roteiro: publicar uma lista com 1 `TRANSFERIR:Z59`, 1 `TRANSFERIR:POLO`, 1 `STATUS:Pronta`, 1 `STATUS:Defeituosa`,
+  1 `STATUS:Defeituosa` com descrição `LAUDO`, 2 `EMPRESTAR` → no ASIdoBem, *Buscar no site (F5)* → conferir que a
+  lista chega, o SHA-256 bate, **todas as linhas viram planos**, na tela de importação é possível informar o
+  **tomador** (por linha e em lote) nas linhas `EMPRESTAR`, e ao efetivar o histórico da urna registra o empréstimo
+  e a urna fica marcada como Emprestada, sem trocar de local. Incluir uma linha `RECOLHER` à mão e conferir que é
+  recusada (fora do vocabulário).
 - Verificar o comportamento com `codigo` diferente do configurado (lista ignorada sem baixar) e com índice sem
   nenhuma lista (só o cabeçalho).
 
