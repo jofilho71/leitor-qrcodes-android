@@ -9,8 +9,8 @@
 O leitor (`https://jofilho71.github.io/leitor-qrcodes-android/`) virou o **"site" do contrato**: o técnico
 digita o **código de 5 dígitos** que o ASIdoBem mostrou, lê o **QR Code oficial do TSE** das urnas, escolhe a
 ação e **publica** uma lista no formato 1 num repositório público do GitHub. O ASIdoBem coleta de lá.
-**Nenhuma alteração no ASIdoBem é necessária para a coleta funcionar** — mas o vocabulário de operações mudou
-(seção 5) e isso precisa de uma decisão do lado de vocês.
+A coleta (índice + download + SHA-256) funciona como o contrato já previa; o que **precisa mudar no ASIdoBem** é o
+vocabulário de operações e de status (seção 5): o usuário decidiu que o ASIdoBem se adapta ao leitor, não o contrário.
 
 ## 2. Como o ASIdoBem deve apontar para o leitor
 
@@ -65,39 +65,50 @@ leitor) **valida**: formato 1, `codigo` de 5 dígitos, `id` válido e igual ao n
    duplicada por reenvio**.
 4. Volta ao início para nova configuração. Cada publicação = uma lista nova com id novo.
 
-## 5. ⚠️ Divergência com o contrato atual — decisão necessária no ASIdoBem
+## 5. Mudanças pedidas ao ASIdoBem (decisão do usuário: o leitor é o modelo; o ASIdoBem se adapta)
 
-Por pedido do usuário, o leitor agora oferece só estas **ações**:
+O usuário decidiu **não** adaptar o leitor ao vocabulário antigo do contrato: **o ASIdoBem e os dois documentos de
+contrato (`IMPORTACAO_WEB.md`, `IMPORTACAO_SISTEMA.md`) devem ser reescritos onde preciso** para refletir o que o
+leitor realmente publica. Pode refazer o que for necessário; não é para preservar compatibilidade com o texto atual
+do §3.4.
 
-| No app | Grava no CSV | Está no contrato (§3.4)? |
+### 5.1 O que o leitor emite hoje (única fonte de `operacao`)
+
+| Ação no app | Valor gravado em `operacao` | Estado no contrato atual |
 |---|---|---|
-| Transferir (zona ou POLO) | `TRANSFERIR:Z<n>` / `TRANSFERIR:POLO` | **Sim** |
-| Emprestar | `EMPRESTAR` | **Não** |
-| Status → Pronta | `STATUS:Pronta` | **Sim** |
-| Status → Defeito | `STATUS:Defeito` | **Não** (existe `Defeituosa`) |
-| Status → Laudo | `STATUS:Laudo` | **Não** |
+| Transferir (zona ou polo) | `TRANSFERIR:Z<n>` / `TRANSFERIR:POLO` | já existe |
+| Emprestar | `EMPRESTAR` (sem parâmetro) | **não existe** — o contrato exclui empréstimos de propósito |
+| Status → Pronta | `STATUS:Pronta` | já existe |
+| Status → Defeito | `STATUS:Defeito` | **não existe** (hoje: `Defeituosa`) |
+| Status → Laudo | `STATUS:Laudo` | **não existe** |
 
-`RECOLHER`, `DEVOLVER_TRE`, `DESCARTAR`, `CADASTRAR` **saíram do app** (continuam válidos no contrato).
+O leitor **não emite mais** `RECOLHER`, `DEVOLVER_TRE`, `DESCARTAR`, `CADASTRAR`, nem os status `Danificada`,
+`Sucateada`, `Nao Certificada`, `Sem Bateria`, `Indisponivel`. Enquanto o ASIdoBem não for atualizado, ele recusa as
+linhas `EMPRESTAR`, `STATUS:Defeito` e `STATUS:Laudo` (as demais linhas da lista seguem normais).
 
-O contrato diz que o vocabulário é **fechado** e que **empréstimos ficam de fora de propósito** ("não movem
-material e o tomador não tem cadastro"). Hoje, portanto, o ASIdoBem **recusa a linha inteira** de
-`EMPRESTAR`, `STATUS:Defeito` e `STATUS:Laudo` (e `STATUS:Pronta` e `TRANSFERIR:*` são aceitos normalmente). As
-demais linhas da mesma lista não são afetadas (recusa por linha). O usuário sabe disso e escolheu assim; as linhas
-recusadas ficam disponíveis no arquivo para a conferência offline dele.
+### 5.2 O que precisa ser decidido/implementado por lá (junto com o usuário)
 
-**Decisões a tomar na sessão do ASIdoBem** (com o usuário):
-1. Aceitar `EMPRESTAR`? Se sim: o que faz (registro/histórico sem mover material? plano?), e como tratar o
-   tomador (a `descricao` é o único lugar para ele). Hoje o contrato diz que empréstimo não entra.
-2. Aceitar `STATUS:Defeito` como sinônimo de `Defeituosa`, ou o leitor passa a gravar `Defeituosa`?
-   (Mudança de uma palavra no app, se preferirem manter o vocabulário oficial.)
-3. `STATUS:Laudo`: é um status novo da urna (qual o significado: "aguardando laudo"?) ou uma anotação? Se for
-   status novo, entra na lista de §3.4.
-4. Quando decidido, **atualizar `IMPORTACAO_WEB.md`/`IMPORTACAO_SISTEMA.md`** (os dois lados do contrato) e avisar
-   o projeto do leitor para ajustar o vocabulário — o ajuste no app é trivial (opções do `<select>` em
-   `index.html`).
+1. **`EMPRESTAR` — nova operação.** Definir o efeito. O contrato antigo diz que empréstimo "não move material e o
+   tomador não tem cadastro"; a descrição (`descricao`, ≤ 200 caracteres, texto livre do técnico) é o único lugar
+   onde o leitor registra quem ficou com a urna. Perguntas: gera plano? apenas registro no histórico da urna? muda
+   algum status/local? aparece em algum relatório? O que acontece quando a urna já está emprestada ou está em outro
+   local? Remover do contrato a frase que exclui empréstimos.
+2. **`STATUS:Laudo` — status novo.** Definir o significado (ex.: "aguardando/com laudo") e como ele convive com os
+   demais status e com o histórico.
+3. **`STATUS:Defeito`.** Decidir entre (a) `Defeito` **substituir** `Defeituosa` como status oficial (migrar os
+   cadastros existentes) ou (b) **coexistirem**/ser sinônimos. O leitor só emite `Defeito`.
+4. **`STATUS:Pronta`** e **`TRANSFERIR`** já funcionam como no contrato (conferir que seguem sem regressão).
+5. **Vocabulário geral.** Decidir se `RECOLHER`, `DEVOLVER_TRE`, `DESCARTAR`, `CADASTRAR` e os outros status ficam
+   válidos no ASIdoBem (o leitor atual não os usa, mas listas antigas ou de outros sites podem) ou são removidos.
+   Recomendação do lado do leitor: **manter** como aceitos — não custam nada e não quebram nada —, desde que o
+   contrato deixe claro que o leitor v1.1 só emite as três operações da tabela acima.
+6. **Reescrever os contratos**: §3.4 (vocabulário e a nota sobre empréstimos), a lista de `<status>`, os exemplos
+   (§3.1 e as listas de exemplo, que ainda usam `local=`, `responsavel=`, `RECOLHER`, `Defeituosa`) e o §3.1 para
+   que `local`/`responsavel` fiquem claramente opcionais e raros. Se mudar qualquer coisa do que o leitor grava,
+   **avisar o projeto do leitor** — o ajuste no app é trivial (opções do `<select>` e das constantes em `index.html`).
 
-Também confirmar: a ausência de `local`/`responsavel` na linha de identificação não deve quebrar nada (são
-opcionais pelo contrato §3.1) — vale um teste.
+Também confirmar com um teste: a ausência de `local`/`responsavel` na linha de identificação não quebra a leitura
+(são opcionais pelo contrato §3.1).
 
 ## 6. Como testar ponta a ponta
 
@@ -105,9 +116,10 @@ opcionais pelo contrato §3.1) — vale um teste.
   `qrcodes-teste/lista.txt`). Os patrimônios `512502xx…5125xxxx` são fictícios e **podem não existir no cadastro**
   do ASIdoBem: para testar `TRANSFERIR`/`STATUS` de verdade, cadastre alguns deles na base de teste ou use
   patrimônios reais; os desconhecidos devem ser recusados com o motivo apropriado.
-- Roteiro: publicar uma lista com 1 `TRANSFERIR:Z59`, 1 `STATUS:Pronta`, 1 `EMPRESTAR`, 1 `STATUS:Defeito`,
-  1 `STATUS:Laudo` → no ASIdoBem, *Buscar no site (F5)* → conferir que a lista chega, o SHA-256 bate, os dois
-  primeiros itens entram e os três últimos são recusados com mensagem clara (enquanto a seção 5 não for resolvida).
+- Roteiro: publicar uma lista com 1 `TRANSFERIR:Z59`, 1 `TRANSFERIR:POLO`, 1 `STATUS:Pronta`, 1 `EMPRESTAR`,
+  1 `STATUS:Defeito`, 1 `STATUS:Laudo` → no ASIdoBem, *Buscar no site (F5)* → conferir que a lista chega, o SHA-256
+  bate e **todas as seis linhas** são aceitas com o efeito definido na seção 5.2 (antes da mudança, as três
+  últimas são recusadas — use isso como teste de regressão "antes/depois").
 - Verificar o comportamento com `codigo` diferente do configurado (lista ignorada sem baixar) e com índice sem
   nenhuma lista (só o cabeçalho).
 
