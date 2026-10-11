@@ -92,6 +92,9 @@ class App:
         self.push = True
         self.rede_caida = False
         self.atraso_put = 0
+        self.simular_existentes = False   # PUT em arquivo já gravado -> 422; GET devolve o conteúdo
+        self.perder_resposta = 0          # próximos PUTs gravam no servidor mas a resposta se perde
+        self.arquivos = {}
 
     # ---- simulação da API do GitHub ----
     def _github(self, route, request):
@@ -104,6 +107,12 @@ class App:
             return route.abort()
         if request.method == "OPTIONS":
             return route.fulfill(status=204, headers=cors)
+        if request.method == "GET" and "/contents/" in request.url:
+            conteudo = self.arquivos.get(request.url)
+            if conteudo is None:
+                return route.fulfill(status=404, headers=cors, content_type="application/json", body="{}")
+            return route.fulfill(status=200, headers=cors, content_type="application/json",
+                                 body=json.dumps({"content": conteudo, "encoding": "base64"}))
         if request.method == "GET":
             return route.fulfill(
                 status=self.status_get, headers=cors, content_type="application/json",
@@ -117,6 +126,15 @@ class App:
                 "auth": request.headers.get("authorization"),
                 "corpo": json.loads(request.post_data),
             })
+            if self.simular_existentes:
+                corpo = json.loads(request.post_data)
+                if request.url in self.arquivos:
+                    return route.fulfill(status=422, headers=cors, content_type="application/json",
+                                         body=json.dumps({"message": "\"sha\" wasn't supplied."}))
+                self.arquivos[request.url] = corpo["content"]
+                if self.perder_resposta:
+                    self.perder_resposta -= 1
+                    return route.abort()
             if len(self.respostas_put) > 1:
                 status, corpo = self.respostas_put.pop(0)
             else:

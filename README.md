@@ -18,6 +18,9 @@ ASIdoBem ──GET──► https://raw.githubusercontent.com/jofilho71/asidobem
 Formato das listas: ver `IMPORTACAO_WEB.md` (formato 1). No ASIdoBem: *Site…* → o endereço acima, token em
 branco.
 
+Se uma lista publicada **não** aparecer no ASIdoBem, veja a aba *Actions* do repositório de listas: o gerador do
+índice deixa de fora (e registra no log) qualquer lista fora do formato 1.
+
 ## Stack
 
 - `index.html` único (HTML + CSS + JS), sem framework nem build.

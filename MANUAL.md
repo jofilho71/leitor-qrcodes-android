@@ -28,7 +28,8 @@ Para quem lê as urnas em campo. Sem termos técnicos.
    código de barras). Só o QR é lido.
 6. Cada leitura boa faz **dois bipes agudos** e a tela mostra "Item incluído". Um **bipe grave** é problema:
    QR que não é de patrimônio válido ou **urna já lida nesta lista**.
-7. Errou? **Excluir último** (seta) tira o último item da lista; pode tocar várias vezes.
+7. Errou? **Excluir último** (seta) tira o último item da lista; pode tocar várias vezes. Para ler a mesma urna de novo depois de excluí-la, afaste a câmera do QR por
+   2 segundos e aponte outra vez.
 8. Terminou? Toque em **Publicar** (seta para cima). Aparece "Publicada" e o app volta ao começo,
    pronto para uma nova leitura. O ASIdoBem enxerga a lista em alguns minutos.
 

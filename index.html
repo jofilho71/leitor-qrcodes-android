@@ -350,6 +350,7 @@
   const REPO = "jofilho71/asidobem-listas";
   const API = "https://api.github.com/repos/" + REPO;
   const MAX_LINHAS_PUBLICACAO = 15000;
+  const MAX_BYTES_PUBLICACAO = 5 * 1024 * 1024;
   const RE_TOKEN = /^[A-Za-z0-9_\-]{20,255}$/;
 
   let tela = "inicio";          // "inicio" | "codigo" | "config" | "leitura"
@@ -362,10 +363,10 @@
   let timerErro = null;
   let publicando = false;
   // último IDEQ visto na câmera: frames seguidos do mesmo QR não geram novo sinal de erro
-  const recente = { valor: null, visto: 0 };
+  const recente = new Map();
   // QR recém-excluído com "Excluir último": a câmera, ainda apontada para ele, não pode readicioná-lo
   // no frame seguinte. O bloqueio dura enquanto o valor continuar à vista (renovado a cada frame)
-  const bloqueioCamera = { valor: null, visto: 0 };
+  const bloqueioCamera = new Map();
 
   // ---------- armazenamento local (nunca quebra se estiver bloqueado) ----------
   const LS = {
@@ -608,7 +609,8 @@
     contadorTexto.innerHTML = `Itens coletados: <b>${n}</b>`;
     btnCsv.disabled = !n;
     btnCompartilhar.disabled = !n;
-    btnExcluirUltimo.disabled = !n;
+    btnExcluirUltimo.disabled = !n || publicando;
+    btnCancelar.disabled = publicando;
     btnPublicar.disabled = !n || publicando;
     atualizarLista();
   }
@@ -632,20 +634,23 @@
     // QR sem IDEQ não é o QR de patrimônio da urna: ruído de cena, ignora em silêncio
     if (!campos.IDEQ) return;
     const patrimonio = campos.IDEQ;
-    if (origem === "câmera" && bloqueioCamera.valor === patrimonio &&
-        Date.now() - bloqueioCamera.visto < JANELA_REPETIDO_MS) {
-      bloqueioCamera.visto = Date.now();
+    if (publicando) return;
+    if (origem === "câmera" && Date.now() - (bloqueioCamera.get(patrimonio) || 0) < JANELA_REPETIDO_MS) {
+      bloqueioCamera.set(patrimonio, Date.now());
       return;
     }
 
     const agora = Date.now();
-    const mesmoFrame = origem === "câmera" && recente.valor === patrimonio && agora - recente.visto < JANELA_REPETIDO_MS;
-    recente.valor = patrimonio;
-    recente.visto = agora;
+    const mesmoFrame = origem === "câmera" && agora - (recente.get(patrimonio) || 0) < JANELA_REPETIDO_MS;
+    recente.set(patrimonio, agora);
     const rejeitar = () => { if (!mesmoFrame) sinalizar("erro"); };
 
     if (!PADRAO_PATRIMONIO.test("45" + patrimonio)) return rejeitar();
     if (codigosVistos.has(patrimonio)) return rejeitar();
+    if (sessao.itens.length >= MAX_LINHAS_PUBLICACAO) {
+      mostrarErroTemporario(`Limite de ${MAX_LINHAS_PUBLICACAO} itens por lista: publique esta e comece outra.`, 8000);
+      return rejeitar();
+    }
     const operacao = operacaoAtual();
     if (!operacao) { inputZona.classList.add("invalido"); return rejeitar(); }
 
@@ -665,13 +670,18 @@
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}${sinal}${pad2(Math.floor(a / 60))}:${pad2(a % 60)}`;
   }
 
+  // seq numérico = publicação (2 dígitos); texto = id do CSV de backup (HHMMSS), que nunca colide com um publicado
   function gerarId(d, seq) {
     const slug = sessao.local ? sessao.local.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}-${slug || "sem-local"}-${pad2(seq)}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}-${slug || "sem-local"}-${typeof seq === "number" ? pad2(seq) : seq}`;
   }
 
-  function montarLista(seq) {
-    const agora = new Date();
+  function sufixoBackup() {
+    const d = new Date();
+    return pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+  }
+
+  function montarLista(seq, agora = new Date()) {
     const id = gerarId(agora, seq);
     const titulo = `Inventário ${pad2(agora.getDate())}/${pad2(agora.getMonth() + 1)}`;
     const ident = ["#ASIDOBEM", "formato=1", `codigo=${sessao.codigo}`, `id=${id}`, `titulo=${titulo}`];
@@ -685,7 +695,7 @@
 
   btnCsv.addEventListener("click", () => {
     if (!sessao || !sessao.itens.length) return;
-    const { id, csv } = montarLista(1);
+    const { id, csv } = montarLista(sufixoBackup());
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -699,7 +709,7 @@
 
   btnCompartilhar.addEventListener("click", async () => {
     if (!sessao || !sessao.itens.length) return;
-    const { id, csv } = montarLista(1);
+    const { id, csv } = montarLista(sufixoBackup());
     let arquivo;
     try {
       arquivo = new File([csv], `lista_${id}.csv`, { type: "text/csv" });
@@ -833,7 +843,7 @@
   // ================= CÂMERA =================
   async function iniciarCamera() {
     erroCamera.style.display = "none";
-    recente.valor = null;
+    recente.clear();
     try {
       streamAtivo = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } }, audio: false
@@ -906,24 +916,24 @@
 
   // ---------- excluir último / cancelar ----------
   btnExcluirUltimo.addEventListener("click", () => {
-    if (!sessao || !sessao.itens.length) return;
+    if (publicando || !sessao || !sessao.itens.length) return;
     const item = sessao.itens.pop();
     codigosVistos.delete(item.codigo);
     salvarSessao();
-    bloqueioCamera.valor = item.codigo;
-    bloqueioCamera.visto = Date.now();
+    bloqueioCamera.set(item.codigo, Date.now());
     atualizarContador();
   });
 
   function encerrarSessao() {
     sessao = null;
     codigosVistos = new Set();
-    bloqueioCamera.valor = null;
-    recente.valor = null;
+    bloqueioCamera.clear();
+    recente.clear();
     LS.apagar("lq.sessao");
   }
 
   btnCancelar.addEventListener("click", () => {
+    if (publicando) return;
     const n = sessao ? sessao.itens.length : 0;
     if (n && !window.confirm(`Cancelar a leitura? ${n} item(ns) serão descartados.`)) return;
     encerrarSessao();
@@ -935,6 +945,7 @@
     if (!sessao || !sessao.itens.length) { LS.apagar("lq.sessao"); return; }
     LS.gravar("lq.sessao", {
       codigo: sessao.codigo, responsavel: sessao.responsavel, local: sessao.local, itens: sessao.itens,
+      quando: sessao.quando || null,
       op: { operacao: selectOperacao.value, zona: inputZona.value, status: selectStatus.value, nota: textoLivre.value }
     });
   }
@@ -967,7 +978,8 @@
       codigo: String(s.codigo),
       responsavel: limparIdentificacao(s.responsavel),
       local: s.local ? (normalizarDestino(s.local) || "") : "",
-      itens: s.itens.map(it => ({ codigo: String(it.codigo), operacao: it.operacao, descricao: limparDescricao(it.descricao) }))
+      itens: s.itens.map(it => ({ codigo: String(it.codigo), operacao: it.operacao, descricao: limparDescricao(it.descricao) })),
+      quando: Number.isFinite(s.quando) ? s.quando : null
     };
     codigosVistos = new Set(sessao.itens.map(it => it.codigo));
     const op = s.op || {};
@@ -1008,6 +1020,21 @@
     });
   }
 
+  function decodificarBase64Utf8(b64) {
+    const bin = atob(String(b64).replace(/\s/g, ""));
+    return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+  }
+
+  // o id já existe: se o conteúdo for idêntico ao nosso, foi um envio anterior cuja resposta se perdeu
+  async function jaPublicadaIgual(token, id, csv) {
+    try {
+      const r = await fetch(`${API}/contents/listas/${id}.csv`, { headers: cabecalhosGithub(token) });
+      if (!r.ok) return false;
+      const j = await r.json();
+      return decodificarBase64Utf8(j.content) === csv;
+    } catch (e) { return false; }
+  }
+
   function concluirPublicacao(id, linhas) {
     encerrarSessao();
     avisoInicio.textContent = `Publicada (${linhas} linhas): ${id}. O ASIdoBem a verá em alguns minutos.`;
@@ -1026,19 +1053,31 @@
       return;
     }
     publicando = true;
+    pararCamera();
     atualizarContador();
+    // o instante fica fixo na sessão: uma nova tentativa reproduz o mesmo CSV e o mesmo id
+    if (!sessao.quando) { sessao.quando = Math.floor(Date.now() / 1000) * 1000; salvarSessao(); }
+    const quando = new Date(sessao.quando);
+    const enviados = sessao.itens.length;
     try {
       for (let seq = 1; seq <= 99; seq++) {
-        const { id, csv } = montarLista(seq);
+        const { id, csv } = montarLista(seq, quando);
+        if (new TextEncoder().encode(csv).length > MAX_BYTES_PUBLICACAO) {
+          mostrarErroTemporario("Lista maior que 5 MB: o índice a recusaria. Exclua itens ou publique em partes.", 8000);
+          return;
+        }
         let resposta = null;
         for (let tentativa = 0; tentativa < 3; tentativa++) {
           resposta = await enviarLista(token, id, csv);
           if (resposta.status !== 409) break;          // 409: outro envio simultâneo no repositório
           await new Promise(res => setTimeout(res, 800));
         }
-        if (resposta.status === 201) { concluirPublicacao(id, sessao.itens.length); return; }
+        if (resposta.status === 201) { concluirPublicacao(id, enviados); return; }
         const corpo = await resposta.json().catch(() => ({}));
-        if (resposta.status === 422 && /sha/i.test(corpo.message || "")) continue; // id já existe: próximo seq
+        if (resposta.status === 422 && /sha/i.test(corpo.message || "")) {
+          if (await jaPublicadaIgual(token, id, csv)) { concluirPublicacao(id, enviados); return; }
+          continue; // id ocupado por outra lista: próximo seq
+        }
         if (resposta.status === 401 || resposta.status === 403) {
           mostrarErroTemporario("Token vencido ou sem permissão. A lista continua na tela; peça um novo link de configuração.", 8000);
         } else {

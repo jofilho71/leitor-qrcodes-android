@@ -19,14 +19,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main   # a cabeça de main, não o commit que disparou: outro job pode já ter atualizado o índice
       - name: Gera o índice
         run: python3 scripts/gerar_indice.py .
       - name: Commita o índice se mudou
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add indice.csv
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Atualiza índice [skip ci]"
-          git pull --rebase origin main
-          git push origin main
+          for tentativa in 1 2 3; do
+            git add indice.csv
+            if git diff --cached --quiet; then exit 0; fi
+            git commit -m "Atualiza índice [skip ci]"
+            if git push origin main; then exit 0; fi
+            # main andou (nova lista): descarta o commit do índice e regenera sobre o estado novo
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/gerar_indice.py .
+          done
+          exit 1

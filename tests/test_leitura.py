@@ -162,7 +162,7 @@ def test_csv_formato_1(app):
     csv = app.baixar_csv()
     linhas = csv.split("\n")
     assert re.fullmatch(
-        r"#ASIDOBEM;formato=1;codigo=48213;id=\d{4}-\d{2}-\d{2}-z59-01;titulo=Inventário \d{2}/\d{2};"
+        r"#ASIDOBEM;formato=1;codigo=48213;id=\d{4}-\d{2}-\d{2}-z59-\d{6};titulo=Inventário \d{2}/\d{2};"
         r"local=Z59;responsavel=Maria S\.;gerado_em=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}",
         linhas[0],
     )
@@ -177,7 +177,7 @@ def test_csv_sem_local_nem_responsavel(app):
     app.enfileirar([App.det_qr("51000001")])
     app.esperar_fila()
     linha = app.baixar_csv().split("\n")[0]
-    assert "-sem-local-01;" in linha
+    assert "-sem-local-" in linha
     assert "local=" not in linha and "responsavel=" not in linha
 
 
