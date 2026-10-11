@@ -67,10 +67,10 @@ enquanto o QR continuar à vista (`bloqueioCamera`).
 ## Operações e CSV (formato 1)
 
 Operações do app: `TRANSFERIR:Z<n>|POLO`, `EMPRESTAR`, `STATUS:<status>` com status `Laudo`, `Defeito`, `Pronta`.
-**Atenção — fora do contrato atual**: `EMPRESTAR`, `Laudo` e `Defeito` não estão no vocabulário fechado de
-`IMPORTACAO_WEB.md` (que tem Recolher, Transferir, Devolver TRE, Descartar, Status, Cadastrar e os status Pronta,
-Defeituosa, …). Por decisão do usuário o app grava esses nomes; o ASIdoBem recusa essas linhas até ser atualizado.
-O índice não valida o vocabulário, então a lista segue disponível para conferência offline.
+**Decisão do usuário (2026-10-11)**: o leitor é o modelo e o ASIdoBem se adapta. `EMPRESTAR`, `Laudo` e `Defeito`
+não constam do contrato original (`IMPORTACAO_WEB.md`); enquanto o ASIdoBem não for atualizado ele recusa essas
+linhas. O pedido de mudança está em `docs/INTEGRACAO_ASIDOBEM.md` (§5). Se o vocabulário mudar de novo, ajuste os
+`<option>` de `#select-operacao`/`#select-status` e esse documento. O índice não valida o vocabulário.
 
 CSV (Salvar, Compartilhar e o conteúdo publicado são o mesmo, de `montarLista(seq)`): UTF-8 **sem BOM**, `;`,
 `\n`; linha `#ASIDOBEM;formato=1;codigo=…;id=…;titulo=…;gerado_em=…`, cabeçalho
