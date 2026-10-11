@@ -10,10 +10,10 @@ def lendo(app, **kw):
 
 
 def test_retomar_apos_recarregar(app):
-    lendo(app, codigo="48213", responsavel="Maria", local="Z59")
+    lendo(app, codigo="48213")
     p = app.page
     p.select_option("#select-operacao", "STATUS")
-    p.select_option("#select-status", "Defeituosa")
+    p.select_option("#select-status", "Defeito")
     p.fill("#texto-livre", "lacre 7")
     app.enfileirar([App.det_qr("51000001")], [App.det_qr("51000002")])
     app.esperar_fila()
@@ -25,9 +25,9 @@ def test_retomar_apos_recarregar(app):
     p.click("#btn-retomar")
     assert p.is_visible("#tela-leitura")
     assert p.inner_text("#codigo-grande") == "Código 48213"
-    assert app.itens() == [["51000001", "STATUS:Defeituosa"], ["51000002", "STATUS:Defeituosa"]]
+    assert app.itens() == [["51000001", "STATUS:Defeito"], ["51000002", "STATUS:Defeito"]]
     assert p.input_value("#select-operacao") == "STATUS"
-    assert p.input_value("#select-status") == "Defeituosa"
+    assert p.input_value("#select-status") == "Defeito"
     assert p.input_value("#texto-livre") == "lacre 7"
     # o conjunto de patrimônios já lidos também volta
     app.ligar_camera()
@@ -36,7 +36,7 @@ def test_retomar_apos_recarregar(app):
     assert len(app.itens()) == 2
     # e a lista retomada gera o CSV com a identificação original
     linha = app.baixar_csv().split("\n")[0]
-    assert "codigo=48213" in linha and "local=Z59" in linha and "responsavel=Maria" in linha
+    assert "codigo=48213" in linha
 
 
 def test_descartar_sessao_salva(app):
@@ -87,8 +87,8 @@ def test_sessao_salva_corrompida_e_ignorada(app):
 def test_sessao_salva_com_formato_invalido_e_ignorada_e_apagada(app):
     app.abrir()
     invalidas = [
-        {"codigo": "abc", "itens": [{"codigo": "51000001", "operacao": "RECOLHER", "descricao": ""}]},
-        {"codigo": "48213", "itens": [{"codigo": "<img src=x>", "operacao": "RECOLHER", "descricao": ""}]},
+        {"codigo": "abc", "itens": [{"codigo": "51000001", "operacao": "EMPRESTAR", "descricao": ""}]},
+        {"codigo": "48213", "itens": [{"codigo": "<img src=x>", "operacao": "EMPRESTAR", "descricao": ""}]},
         {"codigo": "48213", "itens": "nao-e-lista"},
         {"codigo": "48213", "itens": []},
         [1, 2, 3],

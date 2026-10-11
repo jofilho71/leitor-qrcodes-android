@@ -161,15 +161,12 @@ class App:
         self.page.goto(self.url + hash)
         return self.page
 
-    def iniciar(self, codigo="48213", responsavel=None, local=None):
+    def iniciar(self, codigo="48213", operacao="EMPRESTAR"):
         p = self.page
         p.click("#btn-iniciar")
         p.fill("#input-codigo", codigo)
         p.click("#btn-codigo-ok")
-        if responsavel is not None:
-            p.fill("#input-responsavel", responsavel)
-        if local is not None:
-            p.fill("#input-local", local)
+        p.select_option("#select-operacao", operacao)
         p.click("#btn-config-ok")
         p.wait_for_selector("#tela-leitura:not([hidden])")
 

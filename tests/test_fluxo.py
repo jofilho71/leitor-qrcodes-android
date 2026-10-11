@@ -41,26 +41,43 @@ def test_voltar_da_tela_de_codigo_e_da_config(app):
     assert not app.page.is_visible("#codigo-grande")
 
 
-def test_responsavel_e_local_lembrados_no_aparelho(app):
-    app.abrir()
-    app.iniciar(responsavel="Maria S.", local="z059")
-    app.page.reload()
-    app.page.click("#btn-iniciar")
-    app.page.fill("#input-codigo", "48213")
-    app.page.click("#btn-codigo-ok")
-    assert app.page.input_value("#input-responsavel") == "Maria S."
-    assert app.page.input_value("#input-local") == "Z59"
-
-
-def test_local_invalido_bloqueia(app):
+def test_nao_ha_campos_de_responsavel_nem_local(app):
     app.abrir()
     app.page.click("#btn-iniciar")
     app.page.fill("#input-codigo", "48213")
     app.page.click("#btn-codigo-ok")
-    app.page.fill("#input-local", "Zona 5")
+    assert app.page.query_selector("#input-responsavel") is None
+    assert app.page.query_selector("#input-local") is None
+
+
+def test_transferir_sem_zona_valida_nao_comeca_a_leitura(app):
+    app.abrir()
+    app.page.click("#btn-iniciar")
+    app.page.fill("#input-codigo", "48213")
+    app.page.click("#btn-codigo-ok")
+    app.page.select_option("#select-operacao", "TRANSFERIR")
     app.page.click("#btn-config-ok")
     assert app.page.is_visible("#tela-config")
-    assert "Local inválido" in app.page.inner_text("#erro-config")
+    assert "Zona" in app.page.inner_text("#erro-config")
+
+
+def test_operacoes_oferecidas(app):
+    app.abrir()
+    app.page.click("#btn-iniciar")
+    app.page.fill("#input-codigo", "48213")
+    app.page.click("#btn-codigo-ok")
+    valores = app.page.eval_on_selector_all("#select-operacao option", "o => o.map(x => x.value)")
+    assert valores == ["TRANSFERIR", "EMPRESTAR", "STATUS"]
+    app.page.select_option("#select-operacao", "STATUS")
+    status = app.page.eval_on_selector_all("#select-status option", "o => o.map(x => x.textContent)")
+    assert status == ["Laudo", "Defeito", "Pronta"]
+
+
+def test_codigo_discreto_na_tela(app):
+    app.abrir()
+    app.iniciar()
+    tamanho = app.page.evaluate("parseFloat(getComputedStyle(document.getElementById('codigo-grande')).fontSize)")
+    assert tamanho <= 14
 
 
 def test_leitura_mostra_codigo_operacao_e_camera(app):

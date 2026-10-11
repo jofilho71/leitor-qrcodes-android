@@ -12,7 +12,7 @@ def preparar(app, n=2, **kw):
 
 
 def test_publicar_envia_csv_e_volta_ao_inicio(app):
-    preparar(app, n=2, codigo="48213", responsavel="Maria S.", local="Z59")
+    preparar(app, n=2, codigo="48213")
     app.page.click("#btn-publicar")
     app.page.wait_for_selector("#tela-inicio:not([hidden])")
     put = app.puts[0]
@@ -22,7 +22,7 @@ def test_publicar_envia_csv_e_volta_ao_inicio(app):
     assert put["auth"] == "Bearer " + TOKEN_TESTE
     assert "sha" not in put["corpo"]
     assert csv.split("\n")[0].startswith("#ASIDOBEM;formato=1;codigo=48213;id=")
-    assert csv.split("\n")[2:4] == ["51000001;RECOLHER;", "51000002;RECOLHER;"]
+    assert csv.split("\n")[2:4] == ["51000001;EMPRESTAR;", "51000002;EMPRESTAR;"]
     assert "Publicada (2 linhas)" in app.page.inner_text("#aviso-inicio")
     assert app.page.evaluate("localStorage.getItem('lq.sessao')") is None
     app.iniciar(codigo="48213")  # nova configuração oferecida
@@ -31,13 +31,13 @@ def test_publicar_envia_csv_e_volta_ao_inicio(app):
 
 def test_id_incrementa_quando_o_arquivo_ja_existe(app):
     app.respostas_put = [(422, {"message": 'Invalid request.\n\n"sha" wasn\'t supplied.'}), (201, {})]
-    preparar(app, n=1, local="Z59")
+    preparar(app, n=1)
     app.page.click("#btn-publicar")
     app.page.wait_for_selector("#tela-inicio:not([hidden])")
     assert len(app.puts) == 2
-    assert app.puts[0]["url"].endswith("-z59-01.csv")
-    assert app.puts[1]["url"].endswith("-z59-02.csv")
-    assert app.csv_publicado(1).split("\n")[0].count("-z59-02") == 1
+    assert app.puts[0]["url"].endswith("-48213-01.csv")
+    assert app.puts[1]["url"].endswith("-48213-02.csv")
+    assert app.csv_publicado(1).split("\n")[0].count("-48213-02") == 1
 
 
 def test_422_por_outro_motivo_nao_incrementa_e_mantem_a_lista(app):
@@ -110,7 +110,7 @@ def test_lista_vazia_deixa_publicar_desabilitado(app):
 
 def test_texto_com_acento_emoji_e_travessao_chega_identico(app):
     app.abrir()
-    app.iniciar(responsavel="José Álvaro", local="Z59")
+    app.iniciar()
     app.ligar_camera()
     app.page.fill("#texto-livre", "Não liga — lacre nº 7 ✓ 🚫")
     app.enfileirar([App.det_qr("51000001")])
@@ -118,8 +118,8 @@ def test_texto_com_acento_emoji_e_travessao_chega_identico(app):
     app.page.click("#btn-publicar")
     app.page.wait_for_selector("#tela-inicio:not([hidden])")
     csv = app.csv_publicado(0)
-    assert "responsavel=José Álvaro;" in csv.split("\n")[0]
-    assert csv.split("\n")[2] == "51000001;RECOLHER;Não liga — lacre nº 7 ✓ 🚫"
+    assert "responsavel" not in csv.split("\n")[0] and "local=" not in csv.split("\n")[0]
+    assert csv.split("\n")[2] == "51000001;EMPRESTAR;Não liga — lacre nº 7 ✓ 🚫"
 
 
 def test_mais_de_15000_itens_nao_publica(app):
@@ -129,7 +129,7 @@ def test_mais_de_15000_itens_nao_publica(app):
         """() => localStorage.setItem('lq.sessao', JSON.stringify({
               codigo: '48213', responsavel: '', local: '',
               itens: Array.from({length: 15001}, (_, i) => ({
-                codigo: '51' + String(i).padStart(6, '0'), operacao: 'RECOLHER', descricao: ''})),
+                codigo: '51' + String(i).padStart(6, '0'), operacao: 'EMPRESTAR', descricao: ''})),
               op: {}}))"""
     )
     app.page.reload()

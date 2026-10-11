@@ -13,35 +13,32 @@ Para quem lê as urnas em campo. Sem termos técnicos.
 
 1. Abra o app e toque em **Iniciar**.
 2. Digite o **código de 5 dígitos** que o ASIdoBem mostrou. Confira: ele aparece grande no alto da tela
-   durante toda a leitura. Se estiver errado, o ASIdoBem **não vai ver a sua lista**.
-3. Preencha o **responsável** e o **local** (POLO ou Z59, por exemplo). O app lembra do que você usou.
-4. Escolha a **operação**:
-   - **Recolher** — a urna volta ao polo.
-   - **Transferir** — vai para outra zona (digite o número, ex.: 59) ou para o polo.
-   - **Devolver TRE** — a urna sai para o TRE.
-   - **Descartar** — a urna foi baixada/sucateada.
-   - **Status** — mudou a condição da urna (Pronta, Defeituosa…). A urna não muda de lugar.
-   - **Cadastrar** — urna nova que ainda não está no sistema.
+   pequeno no alto da tela. Se estiver errado, o ASIdoBem **não lê a sua lista automaticamente**
+   (o arquivo continua guardado para conferência).
+3. Escolha a **ação**:
+   - **Transferir** — a urna vai para outra zona (digite o número, ex.: 59) ou para o polo.
+   - **Emprestar** — a urna foi emprestada.
+   - **Status** — escolha **Laudo**, **Defeito** ou **Pronta**. A urna não muda de lugar.
    - Se quiser, escreva uma nota (defeito, lacre…). A operação e a nota valem para as próximas leituras
      até você mudar.
-5. Toque em **Começar leitura** e no botão da **câmera**. Aponte para o QR da urna (o QR do TSE ao lado do
+4. Toque em **Começar leitura** e no botão da **câmera**. Aponte para o QR da urna (o QR do TSE ao lado do
    código de barras). Só o QR é lido.
-6. Cada leitura boa faz **dois bipes agudos** e a tela mostra "Item incluído". Um **bipe grave** é problema:
+5. Cada leitura boa faz **dois bipes agudos** e a tela mostra "Item incluído". Um **bipe grave** é problema:
    QR que não é de patrimônio válido ou **urna já lida nesta lista**.
-7. Errou? **Excluir último** (seta) tira o último item da lista; pode tocar várias vezes. Para ler a mesma urna de novo depois de excluí-la, afaste a câmera do QR por
+6. Errou? **Excluir último** (seta) tira o último item da lista; pode tocar várias vezes. Para ler a mesma urna de novo depois de excluí-la, afaste a câmera do QR por
    2 segundos e aponte outra vez.
-8. Terminou? Toque em **Publicar** (seta para cima). Aparece "Publicada" e o app volta ao começo,
+7. Terminou? Toque em **Publicar** (seta para cima). Aparece "Publicada" e o app volta ao começo,
    pronto para uma nova leitura. O ASIdoBem enxerga a lista em alguns minutos.
 
 ## Botões do rodapé
 
 | Botão | Para quê |
 |---|---|
-| Seta curva | Excluir o último item lido |
-| X | Cancelar a leitura inteira (pede confirmação; perde os itens) |
+| Seta curva (vermelho claro) | Excluir o último item lido |
+| X (vermelho escuro) | Excluir tudo: descarta a leitura inteira (pede confirmação) |
 | Disquete | Salvar a lista em arquivo (cópia de segurança) |
 | Compartilhar | Enviar o arquivo por WhatsApp, e-mail… |
-| Seta para cima | **Publicar** a lista para o ASIdoBem |
+| Seta para cima (verde) | **Publicar** a lista para o ASIdoBem |
 
 ## Problemas comuns
 

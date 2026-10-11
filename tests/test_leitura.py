@@ -15,7 +15,7 @@ def test_aceita_qr_valido_e_grava_ideq_puro(app):
     lendo(app)
     app.enfileirar([App.det_qr("51432890")])
     app.esperar_fila()
-    assert app.itens() == [["51432890", "RECOLHER"]]
+    assert app.itens() == [["51432890", "EMPRESTAR"]]
     assert "1" in app.page.inner_text("#contador-texto")
 
 
@@ -76,7 +76,7 @@ def test_qr_com_espaco_e_quebra_de_linha_no_final_e_aceito(app):
     det["rawValue"] += "  \n"
     app.enfileirar([det])
     app.esperar_fila()
-    assert app.itens() == [["51432890", "RECOLHER"]]
+    assert app.itens() == [["51432890", "EMPRESTAR"]]
 
 
 def test_duplicado_entre_camera_e_galeria(app):
@@ -106,7 +106,7 @@ def test_operacoes_e_parametros(app):
         app.enfileirar([App.det_qr(ideq)])
         app.esperar_fila()
 
-    ler("51000001")  # RECOLHER é o padrão
+    ler("51000001")  # EMPRESTAR é o que o helper escolhe
     p.select_option("#select-operacao", "TRANSFERIR")
     assert p.is_visible("#input-zona")
     p.fill("#input-zona", "59")
@@ -115,22 +115,19 @@ def test_operacoes_e_parametros(app):
     ler("51000003")
     p.select_option("#select-operacao", "STATUS")
     assert p.is_visible("#select-status") and not p.is_visible("#input-zona")
-    p.select_option("#select-status", "Defeituosa")
+    p.select_option("#select-status", "Defeito")
     ler("51000004")
-    p.select_option("#select-operacao", "DEVOLVER_TRE")
+    p.select_option("#select-status", "Laudo")
     ler("51000005")
-    p.select_option("#select-operacao", "DESCARTAR")
+    p.select_option("#select-status", "Pronta")
     ler("51000006")
-    p.select_option("#select-operacao", "CADASTRAR")
-    ler("51000007")
     assert app.itens() == [
-        ["51000001", "RECOLHER"],
+        ["51000001", "EMPRESTAR"],
         ["51000002", "TRANSFERIR:Z59"],
         ["51000003", "TRANSFERIR:POLO"],
-        ["51000004", "STATUS:Defeituosa"],
-        ["51000005", "DEVOLVER_TRE"],
-        ["51000006", "DESCARTAR"],
-        ["51000007", "CADASTRAR"],
+        ["51000004", "STATUS:Defeito"],
+        ["51000005", "STATUS:Laudo"],
+        ["51000006", "STATUS:Pronta"],
     ]
 
 
@@ -150,43 +147,26 @@ def test_zona_invalida_nao_aceita_e_corrigir_aceita_a_mesma_urna(app):
 
 
 def test_csv_formato_1(app):
-    lendo(app, codigo="48213", responsavel="Maria S.", local="Z59")
+    lendo(app, codigo="48213")
     p = app.page
     p.fill("#texto-livre", "Não liga; tela apagada")
     app.enfileirar([App.det_qr("51000001")])
     app.esperar_fila()
     p.fill("#texto-livre", "")
-    p.select_option("#select-operacao", "DESCARTAR")
+    p.select_option("#select-operacao", "STATUS")
     app.enfileirar([App.det_qr("51000002")])
     app.esperar_fila()
     csv = app.baixar_csv()
     linhas = csv.split("\n")
     assert re.fullmatch(
-        r"#ASIDOBEM;formato=1;codigo=48213;id=\d{4}-\d{2}-\d{2}-z59-\d{6};titulo=Inventário \d{2}/\d{2};"
-        r"local=Z59;responsavel=Maria S\.;gerado_em=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}",
+        r"#ASIDOBEM;formato=1;codigo=48213;id=\d{4}-\d{2}-\d{2}-48213-\d{6};titulo=Inventário \d{2}/\d{2};"
+        r"gerado_em=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}",
         linhas[0],
     )
     assert linhas[1] == "patrimonio;operacao;descricao"
-    assert linhas[2] == "51000001;RECOLHER;Não liga tela apagada"
-    assert linhas[3] == "51000002;DESCARTAR;"
+    assert linhas[2] == "51000001;EMPRESTAR;Não liga tela apagada"
+    assert linhas[3] == "51000002;STATUS:Laudo;"
     assert csv.endswith("\n") and not csv.startswith("﻿")
-
-
-def test_csv_sem_local_nem_responsavel(app):
-    lendo(app, codigo="48213", responsavel="", local="")
-    app.enfileirar([App.det_qr("51000001")])
-    app.esperar_fila()
-    linha = app.baixar_csv().split("\n")[0]
-    assert "-sem-local-" in linha
-    assert "local=" not in linha and "responsavel=" not in linha
-
-
-def test_responsavel_com_ponto_e_virgula_e_sanitizado(app):
-    lendo(app, responsavel="Maria;S=x")
-    app.enfileirar([App.det_qr("51000001")])
-    app.esperar_fila()
-    linha = app.baixar_csv().split("\n")[0]
-    assert "responsavel=Maria S x;" in linha
 
 
 def test_lista_em_tela_segue_a_ordem_do_csv(app):

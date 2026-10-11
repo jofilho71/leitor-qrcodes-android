@@ -35,7 +35,6 @@
   body.camera-ativa .botoes-modo,
   body.camera-ativa .status-bar,
   body.camera-ativa .pendencia,
-  body.camera-ativa .lista-itens { flex: none; }
   body.camera-ativa .rodape { flex: none; }
 
   header { padding: 10px 14px 8px; }
@@ -45,8 +44,8 @@
     text-transform: uppercase; color: var(--ink-dim); white-space: nowrap;
   }
   .codigo-grande {
-    font-family: var(--mono); font-size: 28px; font-weight: 800; letter-spacing: .06em;
-    color: var(--accent); margin: 6px 0 0;
+    font-family: var(--mono); font-size: 12px; letter-spacing: .06em;
+    color: var(--ink-dim); margin: 2px 0 0;
   }
 
   main { padding: 8px 14px 0; max-width: 520px; margin: 0 auto; }
@@ -102,7 +101,7 @@
     display: none; margin-top: 8px; border-radius: 12px; overflow: hidden;
     background: #000; position: relative; aspect-ratio: 4 / 3; min-height: 160px;
   }
-  body.camera-ativa .camera-wrap { flex: 1; aspect-ratio: auto; min-height: 0; }
+  body.camera-ativa .camera-wrap { flex: none; aspect-ratio: auto; height: 34dvh; min-height: 150px; }
   .camera-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .camera-wrap .moldura {
     position: absolute; inset: 14%; border: 2px solid rgba(232,234,237,.85);
@@ -137,7 +136,7 @@
   .lista-itens .item .ordem { color: var(--ink-dim); flex: none; }
   .lista-itens .item .codigo { overflow-wrap: anywhere; }
   .lista-itens .item .op { margin-left: auto; color: var(--ink-dim); flex: none; }
-  body.camera-ativa .lista-itens { max-height: 25vh; }
+  body.camera-ativa .lista-itens { flex: 1; max-height: none; min-height: 0; }
 
   .rodape {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px;
@@ -149,7 +148,9 @@
   .rodape-botoes .btn-icone { height: 38px; width: 38px; flex: none; }
   .rodape-botoes .btn-icone svg { width: 17px; height: 17px; }
   #btn-cancelar { margin-right: 14px; }
-  #btn-publicar { border-color: var(--accent); color: var(--accent); }
+  #btn-publicar { border-color: var(--ok); color: var(--ok); background: #14261c; }
+  #btn-excluir-ultimo { border-color: #f08a84; color: #f08a84; background: #2a1a1a; }
+  #btn-cancelar { border-color: #9b1c1c; color: #c43434; background: #2a1010; }
 </style>
 </head>
 <body>
@@ -189,8 +190,6 @@
   </section>
 
   <section class="tela" id="tela-config" hidden>
-    <input type="text" id="input-responsavel" maxlength="60" placeholder="Responsável (opcional)" autocomplete="off">
-    <input type="text" id="input-local" maxlength="6" placeholder="Local: POLO ou Z59 (opcional)" autocomplete="off">
     <div id="slot-config"></div>
     <p class="msg-erro" id="erro-config"></p>
     <button class="btn-texto" id="btn-config-ok" type="button">Começar leitura</button>
@@ -201,22 +200,15 @@
     <div id="slot-leitura">
       <div class="bloco-operacao" id="bloco-operacao">
         <select id="select-operacao">
-          <option value="RECOLHER">Recolher</option>
           <option value="TRANSFERIR">Transferir</option>
-          <option value="DEVOLVER_TRE">Devolver TRE</option>
-          <option value="DESCARTAR">Descartar</option>
+          <option value="EMPRESTAR">Emprestar</option>
           <option value="STATUS">Status</option>
-          <option value="CADASTRAR">Cadastrar</option>
         </select>
         <input type="text" id="input-zona" maxlength="6" placeholder="Zona (59) ou POLO" autocomplete="off" hidden>
         <select id="select-status" hidden>
+          <option>Laudo</option>
+          <option>Defeito</option>
           <option>Pronta</option>
-          <option>Defeituosa</option>
-          <option>Danificada</option>
-          <option>Sucateada</option>
-          <option>Nao Certificada</option>
-          <option>Sem Bateria</option>
-          <option>Indisponivel</option>
         </select>
         <input type="text" id="texto-livre" maxlength="200" placeholder="Nota (opcional)" autocomplete="off">
       </div>
@@ -259,7 +251,7 @@
     <button class="btn-icone" id="btn-excluir-ultimo" type="button" title="Excluir último">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
     </button>
-    <button class="btn-icone" id="btn-cancelar" type="button" title="Cancelar leitura">
+    <button class="btn-icone" id="btn-cancelar" type="button" title="Excluir tudo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
     <button class="btn-icone" id="btn-csv" type="button" title="Salvar CSV">
@@ -293,8 +285,6 @@
   const erroCodigo = $("erro-codigo");
   const btnCodigoOk = $("btn-codigo-ok");
   const btnCodigoVoltar = $("btn-codigo-voltar");
-  const inputResponsavel = $("input-responsavel");
-  const inputLocal = $("input-local");
   const slotConfig = $("slot-config");
   const erroConfig = $("erro-config");
   const btnConfigOk = $("btn-config-ok");
@@ -354,7 +344,7 @@
   const RE_TOKEN = /^[A-Za-z0-9_\-]{20,255}$/;
 
   let tela = "inicio";          // "inicio" | "codigo" | "config" | "leitura"
-  let sessao = null;            // {codigo, responsavel, local, itens: [{codigo, operacao, descricao}]}
+  let sessao = null;            // {codigo, itens: [{codigo, operacao, descricao}]}
   let codigosVistos = new Set(); // patrimônios já aceitos nesta sessão (único dedup do app)
   let jsQRCarregado = null;
   let streamAtivo = null;
@@ -394,11 +384,6 @@
     if (!m) return null;
     const n = parseInt(m[1], 10);
     return n > 0 ? "Z" + n : null;
-  }
-
-  // valores da identificação não podem ter ";" nem quebra de linha ("=" também sai: separa chave/valor)
-  function limparIdentificacao(texto) {
-    return String(texto || "").replace(/[;=\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
   }
 
   // a descrição vai numa coluna do CSV: sem ";" nem quebra de linha, até 200 caracteres
@@ -480,11 +465,8 @@
     }
     erroCodigo.textContent = "";
     erroConfig.textContent = "";
-    sessao = { codigo, responsavel: "", local: "", itens: [] };
+    sessao = { codigo, itens: [] };
     codigosVistos = new Set();
-    const lembrado = LS.ler("lq.cfg") || {};
-    inputResponsavel.value = lembrado.responsavel || "";
-    inputLocal.value = lembrado.local || "";
     irPara("config");
   });
 
@@ -495,17 +477,12 @@
   });
 
   btnConfigOk.addEventListener("click", () => {
-    const responsavel = limparIdentificacao(inputResponsavel.value);
-    const localTexto = inputLocal.value.trim();
-    const local = localTexto ? normalizarDestino(localTexto) : "";
-    if (local === null) {
-      erroConfig.textContent = "Local inválido: use POLO ou Z59.";
+    if (!operacaoAtual()) {
+      inputZona.classList.add("invalido");
+      erroConfig.textContent = "Zona inválida: use 59 ou POLO.";
       return;
     }
     erroConfig.textContent = "";
-    sessao.responsavel = responsavel;
-    sessao.local = local;
-    LS.gravar("lq.cfg", { responsavel, local });
     irPara("leitura");
   });
 
@@ -672,8 +649,7 @@
 
   // seq numérico = publicação (2 dígitos); texto = id do CSV de backup (HHMMSS), que nunca colide com um publicado
   function gerarId(d, seq) {
-    const slug = sessao.local ? sessao.local.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}-${slug || "sem-local"}-${typeof seq === "number" ? pad2(seq) : seq}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}-${sessao.codigo}-${typeof seq === "number" ? pad2(seq) : seq}`;
   }
 
   function sufixoBackup() {
@@ -685,8 +661,6 @@
     const id = gerarId(agora, seq);
     const titulo = `Inventário ${pad2(agora.getDate())}/${pad2(agora.getMonth() + 1)}`;
     const ident = ["#ASIDOBEM", "formato=1", `codigo=${sessao.codigo}`, `id=${id}`, `titulo=${titulo}`];
-    if (sessao.local) ident.push(`local=${sessao.local}`);
-    if (sessao.responsavel) ident.push(`responsavel=${sessao.responsavel}`);
     ident.push(`gerado_em=${isoComFuso(agora)}`);
     const linhas = [ident.join(";"), "patrimonio;operacao;descricao"];
     for (const it of sessao.itens) linhas.push(`${it.codigo};${it.operacao};${it.descricao}`);
@@ -935,7 +909,7 @@
   btnCancelar.addEventListener("click", () => {
     if (publicando) return;
     const n = sessao ? sessao.itens.length : 0;
-    if (n && !window.confirm(`Cancelar a leitura? ${n} item(ns) serão descartados.`)) return;
+    if (n && !window.confirm(`Excluir tudo? ${n} item(ns) serão descartados.`)) return;
     encerrarSessao();
     irPara("inicio");
   });
@@ -944,7 +918,7 @@
   function salvarSessao() {
     if (!sessao || !sessao.itens.length) { LS.apagar("lq.sessao"); return; }
     LS.gravar("lq.sessao", {
-      codigo: sessao.codigo, responsavel: sessao.responsavel, local: sessao.local, itens: sessao.itens,
+      codigo: sessao.codigo, itens: sessao.itens,
       quando: sessao.quando || null,
       op: { operacao: selectOperacao.value, zona: inputZona.value, status: selectStatus.value, nota: textoLivre.value }
     });
@@ -976,8 +950,6 @@
     if (!sessaoSalvaValida(s)) { prepararInicio(); return; }
     sessao = {
       codigo: String(s.codigo),
-      responsavel: limparIdentificacao(s.responsavel),
-      local: s.local ? (normalizarDestino(s.local) || "") : "",
       itens: s.itens.map(it => ({ codigo: String(it.codigo), operacao: it.operacao, descricao: limparDescricao(it.descricao) })),
       quando: Number.isFinite(s.quando) ? s.quando : null
     };

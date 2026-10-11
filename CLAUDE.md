@@ -34,16 +34,18 @@ são ações externas: só com confirmação do usuário.
 
 ## Fluxo do app
 
-Telas: `inicio → codigo → config → leitura` (função `irPara`). Estado em `sessao = {codigo, responsavel, local,
+Telas: `inicio → codigo → config → leitura` (função `irPara`). Estado em `sessao = {codigo,
 itens:[{codigo, operacao, descricao}]}` e `codigosVistos` (Set).
 
 1. **Iniciar** verifica o token do aparelho (`verificarToken`: `GET` no repositório de listas; `permissions.push`
    explicitamente falso, 401/403/404 → bloqueia; rede/5xx → segue com aviso).
-2. **Código** do ASIdoBem: 5 dígitos, `/^[1-9]\d{4}$/`. Fica grande no topo para o técnico conferir (o ASIdoBem
-   ignora em silêncio listas de códigos que não são dele — o app não tem como detectar código errado).
-3. **Config**: responsável e local (`POLO`/`Z<n>`, lembrados no aparelho em `lq.cfg`) + operação inicial.
+2. **Código** do ASIdoBem: 5 dígitos, `/^[1-9]\d{4}$/`. Aparece discreto no topo (decisão do usuário: menos espaço).
+   Lista com código errado não é lida pelo ASIdoBem, mas continua no repositório para conferência offline.
+3. **Config**: operação inicial (e zona, se Transferir; zona inválida bloqueia). **Não há** responsável nem local:
+   o código já identifica a origem (removidos a pedido do usuário).
 4. **Leitura**: câmera/galeria. Operação, zona/status e nota podem mudar durante a leitura (uma lista pode
-   misturar operações). Rodapé: Excluir último, Cancelar (confirma), Salvar, Compartilhar, Publicar.
+   misturar operações). Rodapé: Excluir último (vermelho claro), Excluir tudo (`btn-cancelar`, vermelho escuro, confirma), Salvar,
+   Compartilhar (cores padrão), Publicar (verde).
 5. **Publicar** → `PUT` no repositório; sucesso limpa a sessão e volta a `inicio` (nova configuração).
 
 ## Aceitação de um QR (`processarCodigoDetectado`)
@@ -64,14 +66,16 @@ enquanto o QR continuar à vista (`bloqueioCamera`).
 
 ## Operações e CSV (formato 1)
 
-Operações: `RECOLHER`, `TRANSFERIR:Z<n>|POLO`, `DEVOLVER_TRE`, `DESCARTAR`, `STATUS:<status>`, `CADASTRAR`.
-Status: Pronta, Defeituosa, Danificada, Sucateada, Nao Certificada, Sem Bateria, Indisponivel.
+Operações do app: `TRANSFERIR:Z<n>|POLO`, `EMPRESTAR`, `STATUS:<status>` com status `Laudo`, `Defeito`, `Pronta`.
+**Atenção — fora do contrato atual**: `EMPRESTAR`, `Laudo` e `Defeito` não estão no vocabulário fechado de
+`IMPORTACAO_WEB.md` (que tem Recolher, Transferir, Devolver TRE, Descartar, Status, Cadastrar e os status Pronta,
+Defeituosa, …). Por decisão do usuário o app grava esses nomes; o ASIdoBem recusa essas linhas até ser atualizado.
+O índice não valida o vocabulário, então a lista segue disponível para conferência offline.
 
 CSV (Salvar, Compartilhar e o conteúdo publicado são o mesmo, de `montarLista(seq)`): UTF-8 **sem BOM**, `;`,
-`\n`; linha `#ASIDOBEM;formato=1;codigo=…;id=…;titulo=…[;local=…][;responsavel=…];gerado_em=…`, cabeçalho
+`\n`; linha `#ASIDOBEM;formato=1;codigo=…;id=…;titulo=…;gerado_em=…`, cabeçalho
 `patrimonio;operacao;descricao`, uma linha por item. Descrição ≤ 200 chars, sem `;`/quebra de linha
-(`limparDescricao`); responsável sem `;`, `=` e quebras (`limparIdentificacao`). `id` =
-`aaaa-mm-dd-<local|sem-local>-<seq>`. Sem `escaparCsv`: o contrato proíbe aspas/`;` nos valores. Limite local:
+(`limparDescricao`). `id` = `aaaa-mm-dd-<código>-<seq>` (backup: `-HHMMSS` no lugar do seq). Sem `escaparCsv`: o contrato proíbe aspas/`;` nos valores. Limite local:
 15.000 itens por lista.
 
 ## Publicação e token
