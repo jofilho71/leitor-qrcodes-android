@@ -164,6 +164,11 @@
   <section class="tela" id="tela-inicio">
     <button class="btn-texto" id="btn-iniciar" type="button">Iniciar</button>
     <p class="aviso" id="aviso-inicio"></p>
+    <div id="caixa-retomar" hidden>
+      <p class="aviso" id="texto-retomar"></p>
+      <button class="btn-texto" id="btn-retomar" type="button">Retomar</button>
+      <button class="btn-texto sec" id="btn-descartar" type="button">Descartar</button>
+    </div>
   </section>
 
   <section class="tela" id="tela-codigo" hidden>
@@ -308,6 +313,10 @@
   const btnCompartilhar = $("btn-compartilhar");
   const btnExcluirUltimo = $("btn-excluir-ultimo");
   const btnCancelar = $("btn-cancelar");
+  const caixaRetomar = $("caixa-retomar");
+  const textoRetomar = $("texto-retomar");
+  const btnRetomar = $("btn-retomar");
+  const btnDescartar = $("btn-descartar");
 
   const ICONE_CAMERA = iconeCamera.innerHTML;
   const ICONE_PARAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></svg>';
@@ -411,6 +420,7 @@
     if (nome !== "leitura") pararCamera();
     if (nome === "leitura") atualizarEstadoVisual();
     atualizarContador();
+    if (nome === "inicio") prepararInicio();
   }
 
   btnIniciar.addEventListener("click", () => {
@@ -564,6 +574,7 @@
 
     codigosVistos.add(patrimonio);
     sessao.itens.push({ codigo: patrimonio, operacao, descricao: limparDescricao(textoLivre.value) });
+    salvarSessao();
     atualizarContador();
     sinalizar("sucesso");
     mostrarItemIncluido();
@@ -820,6 +831,7 @@
     if (!sessao || !sessao.itens.length) return;
     const item = sessao.itens.pop();
     codigosVistos.delete(item.codigo);
+    salvarSessao();
     bloqueioCamera.valor = item.codigo;
     bloqueioCamera.visto = Date.now();
     atualizarContador();
@@ -830,6 +842,7 @@
     codigosVistos = new Set();
     bloqueioCamera.valor = null;
     recente.valor = null;
+    LS.apagar("lq.sessao");
   }
 
   btnCancelar.addEventListener("click", () => {
@@ -837,6 +850,65 @@
     if (n && !window.confirm(`Cancelar a leitura? ${n} item(ns) serão descartados.`)) return;
     encerrarSessao();
     irPara("inicio");
+  });
+
+  // ---------- sessão salva (o Chrome do Android pode descartar a aba em segundo plano) ----------
+  function salvarSessao() {
+    if (!sessao || !sessao.itens.length) { LS.apagar("lq.sessao"); return; }
+    LS.gravar("lq.sessao", {
+      codigo: sessao.codigo, responsavel: sessao.responsavel, local: sessao.local, itens: sessao.itens,
+      op: { operacao: selectOperacao.value, zona: inputZona.value, status: selectStatus.value, nota: textoLivre.value }
+    });
+  }
+
+  // o conteúdo salvo não é confiável (pode estar corrompido ou ter sido editado): valida a forma inteira
+  function sessaoSalvaValida(s) {
+    return !!s && typeof s === "object" && !Array.isArray(s) &&
+      CODIGO_VALIDO.test(String(s.codigo)) &&
+      Array.isArray(s.itens) && s.itens.length > 0 &&
+      s.itens.every(it => it && /^\d{1,20}$/.test(String(it.codigo)) &&
+        typeof it.operacao === "string" && typeof it.descricao === "string");
+  }
+
+  function prepararInicio() {
+    const s = LS.ler("lq.sessao");
+    if (sessaoSalvaValida(s)) {
+      textoRetomar.textContent = `Retomar leitura de ${s.itens.length} itens (código ${s.codigo})?`;
+      caixaRetomar.hidden = false;
+    } else {
+      caixaRetomar.hidden = true;
+      if (s !== null) LS.apagar("lq.sessao");
+    }
+    btnIniciar.hidden = !caixaRetomar.hidden;
+  }
+
+  btnRetomar.addEventListener("click", () => {
+    const s = LS.ler("lq.sessao");
+    if (!sessaoSalvaValida(s)) { prepararInicio(); return; }
+    sessao = {
+      codigo: String(s.codigo),
+      responsavel: limparIdentificacao(s.responsavel),
+      local: s.local ? (normalizarDestino(s.local) || "") : "",
+      itens: s.itens.map(it => ({ codigo: String(it.codigo), operacao: it.operacao, descricao: limparDescricao(it.descricao) }))
+    };
+    codigosVistos = new Set(sessao.itens.map(it => it.codigo));
+    const op = s.op || {};
+    if (Array.from(selectOperacao.options).some(o => o.value === op.operacao)) selectOperacao.value = op.operacao;
+    if (Array.from(selectStatus.options).some(o => o.value === op.status)) selectStatus.value = op.status;
+    inputZona.value = typeof op.zona === "string" ? op.zona.slice(0, 6) : "";
+    textoLivre.value = typeof op.nota === "string" ? op.nota.slice(0, 200) : "";
+    atualizarCamposOperacao();
+    irPara("leitura");
+  });
+
+  btnDescartar.addEventListener("click", () => {
+    LS.apagar("lq.sessao");
+    prepararInicio();
+  });
+
+  [selectOperacao, selectStatus, inputZona, textoLivre].forEach(el => {
+    el.addEventListener("input", () => { if (tela === "leitura") salvarSessao(); });
+    el.addEventListener("change", () => { if (tela === "leitura") salvarSessao(); });
   });
 
   irPara("inicio");
