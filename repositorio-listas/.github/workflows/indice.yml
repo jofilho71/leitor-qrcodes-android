@@ -1,0 +1,32 @@
+name: indice
+
+on:
+  push:
+    branches: [main]
+    paths: ["listas/**"]
+  workflow_dispatch:
+
+# uma execução por vez: dois celulares publicando juntos não disputam o índice
+concurrency:
+  group: indice
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gera o índice
+        run: python3 scripts/gerar_indice.py .
+      - name: Commita o índice se mudou
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add indice.csv
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Atualiza índice [skip ci]"
+          git pull --rebase origin main
+          git push origin main
