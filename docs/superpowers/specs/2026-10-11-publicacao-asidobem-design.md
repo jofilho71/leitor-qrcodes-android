@@ -1,184 +1,189 @@
-# Publicação de listas para o ASIdoBem — design (Firestore)
+# Publicação de listas para o ASIdoBem — design (repositório GitHub público)
 
-Data: 2026-10-11 (revisado: Worker+R2 trocado por Firestore). Contrato de conteúdo: `IMPORTACAO_WEB.md`
-(formato 1). O **transporte** muda em relação ao contrato (ver §3); os `IMPORTACAO*.md` **não são alterados**
-nesta etapa e ficam defasados nesse ponto até a revisão que o usuário fará.
+Data: 2026-10-11 (3ª revisão: Worker+R2 → Firestore → **repositório público no GitHub**, com sessão guiada
+por código). Contrato de conteúdo: `IMPORTACAO_WEB.md` (formato 1). Neste desenho o **ASIdoBem não muda**:
+ele lê `indice.csv` e as listas por HTTPS/GET, sem token. Os `IMPORTACAO*.md` não são alterados.
 
 ## 1. Objetivo
 
-O leitor passa a ser o "site" do contrato: a equipe lê o QR oficial do TSE das urnas, escolhe a operação
-de cada uma e **publica** uma lista no Firestore. O ASIdoBem lê as listas de lá e as confere como hoje.
+O leitor é o "site" do contrato. Um técnico abre o link, informa o código de 5 dígitos do ASIdoBem, lê os QRs
+das urnas, escolhe a operação de cada uma e **publica** a lista. A lista vai para um repositório público; o
+ASIdoBem a coleta de lá.
 
 Entregas:
 
 1. Simplificar o app: só Inventário, só QR, única recusa por repetição (além do padrão de patrimônio).
-2. Escolher a operação do contrato em vez das categorias antigas.
-3. Gerar e publicar a lista (formato 1) no Firestore.
-4. Som de sucesso e de erro, além da vibração já existente.
-5. Lado ASIdoBem: o que ele precisa mudar para ler do Firestore (especificado aqui, implementado por
-   quem mantém o ASIdoBem; o app Java não está neste repositório).
+2. Operação do contrato no lugar das categorias antigas.
+3. Fluxo guiado: **Iniciar → código → configuração → leitura → publicar → nova configuração**.
+4. Publicar a lista (formato 1) no repositório; o índice é gerado por GitHub Actions.
+5. Som de sucesso e de erro, além da vibração já existente.
+6. Configuração do aparelho por link com token.
 
-Fora de escopo: fila offline automática, alterar o `ListaCSV` do ASIdoBem, alterar os `IMPORTACAO*.md`.
+Fora de escopo: fila offline automática, alterar o ASIdoBem, alterar os `IMPORTACAO*.md`.
 
 ## 2. Arquitetura
 
 ```
-Celular (index.html) ──REST + idToken (conta escritora)──► Firestore: listas/<id>
-ASIdoBem ──REST + idToken (conta leitora)──► Firestore: runQuery listas → campo csv → ListaCSV (já existente)
+Celular (index.html, GitHub Pages) ──PUT contents API (token fine-grained)──► repo público asidobem-listas
+                                                                               listas/<id>.csv
+                                      GitHub Actions (push em listas/**) ──►  indice.csv  (id;codigo;gerado_em;titulo;linhas;sha256;arquivo)
+ASIdoBem ──GET https://raw.githubusercontent.com/jofilho71/asidobem-listas/main/indice.csv e listas/<id>.csv
 ```
 
-- `index.html` segue único, sem build, sem SDK: usa `fetch` na REST API do Firestore e do Identity Toolkit.
-- Arquivos novos no repositório: `firestore.rules`, `firebase.json` (só a seção firestore) e
-  `.firebaserc`. Deploy das regras com `firebase deploy --only firestore:rules`.
-- Plano gratuito (Spark): 20 mil gravações e 50 mil leituras por dia; sobra para o uso.
-- **Autenticação**: Authentication por e-mail e senha, duas contas — `escritora` (celulares da equipe) e
-  `leitora` (ASIdoBem). Papel identificado pelo e-mail na regra.
+- Repositório **novo e público**: `jofilho71/asidobem-listas` (branch `main`). Separado do app, de propósito:
+  o token do celular não pode alterar o código do próprio app.
+- `index.html` segue único, sem build, sem SDK: `fetch` direto na API do GitHub (suporta CORS).
+- ASIdoBem: *Site…* → `https://raw.githubusercontent.com/jofilho71/asidobem-listas/main/indice.csv`, token em
+  branco. `raw.githubusercontent.com` responde 200 sem redirecionamento, como o contrato exige. O CDN guarda
+  cache de ~5 min; a lista chega ao ASIdoBem alguns minutos depois de publicada (aceito).
 
-## 3. Modelo de dados
+## 3. Repositório e Actions
 
-Coleção `listas`, documento de id = `id` da lista (`aaaa-mm-dd-<local>-<seq>`, letras/números/`-`, ≤ 60).
+- `listas/<id>.csv`: um arquivo por lista, formato 1, nunca editado (convenção; o app só cria).
+- `.github/workflows/indice.yml`: dispara em push que toque `listas/**`; `concurrency` em um único grupo
+  (um por vez); roda `scripts/gerar_indice.py` (Python da imagem do runner, sem dependências); se `indice.csv`
+  mudou, commita como `github-actions[bot]` com `[skip ci]` (e o filtro de path evita laço).
+- `scripts/gerar_indice.py`, para cada `listas/*.csv`: lê a linha `#ASIDOBEM;…`; **valida** formato 1,
+  `codigo` de 5 dígitos, `id` válido e igual ao nome do arquivo, cabeçalho exato, 3 colunas por linha,
+  ≤ 20.000 linhas, ≤ 5 MB; arquivo inválido é **deixado fora do índice** e registrado no log do Actions.
+  Calcula SHA-256 dos bytes exatos, conta as linhas de dados, e escreve `indice.csv` com o cabeçalho
+  `id;codigo;gerado_em;titulo;linhas;sha256;arquivo` ordenado por `gerado_em` desc (desempate por `id`),
+  `arquivo` = `listas/<id>.csv`. Não-determinismo zero: mesma entrada, mesmo índice.
 
-| Campo | Tipo | Conteúdo |
-|---|---|---|
-| `codigo` | string | 5 dígitos (10000–99999) |
-| `titulo` | string | ≤ 80, sem `;` |
-| `local` | string | `POLO`, `Z<n>` ou vazio |
-| `responsavel` | string | curto, opcional |
-| `gerado_em` | string | ISO 8601 com fuso (ordenável) |
-| `linhas` | integer | quantidade de linhas de dados |
-| `csv` | string | **a lista inteira no formato 1** (identificação, cabeçalho, linhas), idêntica à que o `ListaCSV` já lê |
+## 4. Token e configuração do aparelho
 
-O texto do campo `csv` continua sendo o contrato de conteúdo. Mudam só o transporte (Firestore, não HTTP+
-índice) e as garantias: o **índice e o SHA-256 saem**; a ordem vem de `orderBy gerado_em desc`; a
-imutabilidade e a unicidade do `id` vêm das regras (create-only; o id do documento é o `id` da lista).
-Limite do Firestore: documento ≤ 1 MiB. Com ~40 bytes por linha cabem ~25.000 linhas; o limite de 20.000
-linhas do contrato se mantém, e o app recusa localmente acima de 15.000 linhas por segurança (>15.000 → dividir
-em mais de uma lista).
+- **Token**: *fine-grained personal access token* do GitHub, restrito ao repositório `asidobem-listas`,
+  permissão *Contents: Read and write*, validade máxima (1 ano). **Um token por aparelho/técnico**,
+  revogáveis individualmente. O token **nunca** está no `index.html` nem em nenhum repositório.
+- **Link de configuração**: `https://jofilho71.github.io/leitor-qrcodes-android/#cfg=<token>`. Ao abrir, o
+  app valida o formato, guarda o token em `localStorage`, **remove o fragmento** com `history.replaceState`
+  e mostra "Aparelho configurado". O fragmento não é enviado a servidor.
+- **Ajustes** (alternativa discreta): campo para colar o token e botão para apagá-lo.
+- Sem token no aparelho, **Iniciar** avisa e não prossegue (ver §5.1).
 
-## 4. Regras de segurança (`firestore.rules`)
+## 5. Fluxo e telas
 
-- `listas/{id}`: `create` só se `request.auth.token.email` for a conta escritora; `read` (get/list) só para
-  a conta leitora (e a escritora, para a confirmação pós-publicar); `update`/`delete` nunca.
-- Validação na criação: `id` do documento bate com o `id` dentro do `csv`; `codigo` bate com o do `csv`;
-  `codigo` = 5 dígitos; `csv` começa com `#ASIDOBEM;formato=1;`; tamanho de `csv` ≤ 1 MiB; os campos
-  esperados e só eles.
-- Os e-mails das duas contas ficam como constantes no arquivo de regras (não são segredos).
-- Cadastros abertos de Authentication ficam **desligados**: as contas são criadas pelo console/CLI.
+### 5.1 Estados
+```
+INICIO ──Iniciar──► CODIGO ──ok──► CONFIG ──ok──► LEITURA ──Publicar ok──► INICIO (configuração nova)
+                                                     │  ├─ Excluir último
+                                                     │  └─ Cancelar leitura (confirmação) ──► INICIO
+```
 
-## 5. App
+- **INICIO**: botão Iniciar (e acesso aos ajustes). Se existe uma sessão salva (§5.6), pergunta
+  "Retomar leitura de N itens (código X)?" com Retomar / Descartar.
+- **Ao tocar Iniciar**: verifica o token (`GET /repos/jofilho71/asidobem-listas` com o token). 401/403/404 →
+  "Token ausente ou vencido" e não segue. Falha de rede → segue com aviso "sem conexão: confira antes de
+  publicar" (não impede a coleta em campo).
+- **CODIGO**: campo numérico de 5 dígitos (10000–99999, sem zeros à esquerda). Obrigatório para seguir.
+- **CONFIG**: responsável e local (`POLO` ou `Z<n>`, opcionais; **lembrados** no aparelho), operação
+  inicial (+ zona ou status, conforme §5.4) e nota inicial. Botão que leva à leitura com o botão da câmera
+  disponível (a câmera só liga por toque do usuário, o que também libera o áudio).
+- **LEITURA**: o **código aparece grande** no topo (o técnico confere com o que o ASIdoBem mostrou), seguido
+  de câmera/galeria, operação/parâmetro/nota (**editáveis durante a leitura**: uma lista pode misturar
+  operações), a lista dos itens lidos e o rodapé.
 
-### 5.1 Remoções
-Modo Bateria inteiro (segmented control, pareamento, decoy `CDJE`, `ultimoCodigo`/`candidato`,
-`pendente`, confirmação de troca de modo, `gerarCsvBateria`, CSV `bateria_*`); leitura de código de barras;
-`diferencaPequena`, `ultimoPatrimonioAceito`, `LIMITE_DIFERENCA_PATRIMONIO`; `codigoTocaBorda` e
-`MARGEM_BORDA_FRACAO`. `FORMATOS_DESEJADOS` = `["qr_code"]`.
+### 5.2 Rodapé na leitura
+Contador `Itens coletados: N`, e botões (ícone, sem texto): **Excluir último**, **Cancelar leitura**,
+**Publicar**; Salvar CSV e Compartilhar seguem como backup local.
 
-### 5.2 Aceitação de uma detecção
+- **Excluir último**: remove o item mais recente da lista **e do `codigosInventarioVistos`**, para poder ser
+  lido de novo. Pode ser acionado repetidamente (remove um por vez, do mais novo ao mais antigo). Sem
+  confirmação (ação barata e reversível relendo). Sem itens: desabilitado.
+- **Cancelar leitura**: pede confirmação nativa (`window.confirm`) citando N itens; confirmado, para a
+  câmera, descarta a sessão (inclui a salva) e volta a INICIO. Sem itens: volta direto.
+- **Publicar**: com 0 itens, desabilitado. Ver §5.5.
+
+### 5.3 Aceitação de uma detecção
 1. `format !== "qr_code"` → descarta, silêncio.
 2. Sem `IDEQ` em `parsearCampos()` → descarta, silêncio.
 3. `"45"+IDEQ` fora de `PADRAO_PATRIMONIO` → **erro com som**.
 4. `IDEQ` já em `codigosInventarioVistos` → **erro com som**.
-5. Senão aceita: grava o `IDEQ` puro (8 dígitos) com a operação e a nota atuais; vibração + som de sucesso.
+5. Senão aceita: grava o `IDEQ` puro (8 dígitos) com a operação/nota atuais; vibração + som de sucesso.
 
-`codigosInventarioVistos` só zera junto com `resultados` (Limpar e após publicar com sucesso).
+`codigosInventarioVistos` vale para a sessão e só zera ao publicar, cancelar ou descartar. A unicidade é
+**dentro da lista**; a mesma urna em listas de técnicos diferentes quem trata é a conferência do ASIdoBem.
 
-### 5.3 Operação
-O select de categoria vira select de operação: Recolher, Transferir, Devolver TRE, Descartar, Status,
-Cadastrar (valores do contrato: `RECOLHER`, `TRANSFERIR:Z<n>`, `DEVOLVER_TRE`, `DESCARTAR`,
-`STATUS:<status>`, `CADASTRAR`).
+### 5.4 Operação
+Select: Recolher, Transferir, Devolver TRE, Descartar, Status, Cadastrar (`RECOLHER`, `TRANSFERIR:Z<n>`,
+`DEVOLVER_TRE`, `DESCARTAR`, `STATUS:<status>`, `CADASTRAR`).
 
-- Transferir mostra um campo de zona; aceita `Z59`/`59`/`Z059`, grava `Z<número sem zeros à esquerda>`;
-  `POLO` também é aceito. Zona inválida impede a leitura de ser aceita (campo marcado).
-- Status mostra select com: Pronta, Defeituosa, Danificada, Sucateada, Nao Certificada, Sem Bateria,
+- Transferir mostra campo de zona: aceita `Z59`/`59`/`Z059`, grava `Z<n sem zeros>`; `POLO` também. Zona
+  inválida marca o campo e **impede a leitura de ser aceita** (som de erro).
+- Status mostra select: Pronta, Defeituosa, Danificada, Sucateada, Nao Certificada, Sem Bateria,
   Indisponivel.
-- A nota vira `descricao`: até 200 caracteres; `;` e quebras de linha são trocados por espaço.
-- Operação/parâmetro/nota são definidos uma vez e reaproveitados até mudarem.
-
-### 5.4 Lista em tela e CSV
-- `#lista-inventario` mostra número de ordem, `IDEQ` e operação (com parâmetro), na ordem do CSV;
-  conteúdo escapado com `escaparHtml()`.
-- CSV (Salvar/Compartilhar **e** o campo `csv` publicado) = formato 1: linha
-  `#ASIDOBEM;formato=1;codigo=<código>;id=<id>;titulo=…;local=…;responsavel=…;gerado_em=…`, cabeçalho
-  `patrimonio;operacao;descricao`, UTF-8 com `;`. Patrimônio como texto, só dígitos.
-- Salvar/Compartilhar abrem o mesmo diálogo de identificação da publicação (código, responsável, local),
-  para que o arquivo local também seja aceito pelo ASIdoBem ("Abrir arquivo…"). Cancelar cancela a ação.
-- Nome do arquivo: `lista_<id>.csv`.
+- A nota vira `descricao`: até 200 caracteres; `;` e quebras de linha viram espaço.
 
 ### 5.5 Publicar
-Botão novo no rodapé (ícone, sem texto). Diálogo com:
+O código e a identificação já existem desde o início da sessão: **não há mais diálogo**.
 
-- **Código** (5 dígitos, obrigatório, 10000–99999; digitado a cada coleta, não lembrado).
-- **Responsável** e **local** (`POLO` ou `Z<n>`), opcionais, lembrados no aparelho (`localStorage`).
-- O app gera `id` = `aaaa-mm-dd-<local em minúsculas ou sem-local>-<seq>` (seq de 2 dígitos; se o
-  Firestore recusar por documento já existente, incrementa e tenta de novo) e `titulo` automático
+- `id` = `aaaa-mm-dd-<local em minúsculas ou sem-local>-<seq 2 dígitos>`; `titulo` automático
   ("Inventário dd/mm").
+- CSV de formato 1: `#ASIDOBEM;formato=1;codigo=<código>;id=<id>;titulo=…;local=…;responsavel=…;gerado_em=…`,
+  cabeçalho `patrimonio;operacao;descricao`, UTF-8, `;`, patrimônio como texto.
+- `PUT https://api.github.com/repos/jofilho71/asidobem-listas/contents/listas/<id>.csv`
+  (`Authorization: Bearer <token>`, corpo `{message, content: <base64 UTF-8>}`, **sem `sha`**, logo falha
+  se o arquivo existir). `201` = publicada. `422` (já existe) → incrementa `seq` e repete. Até 99.
+- Sucesso: "Publicada (N linhas). O ASIdoBem a verá em alguns minutos", limpa a sessão e **volta a INICIO**
+  para uma nova configuração. Falha (rede, 401/403, 5xx): mostra o motivo, **mantém a lista na tela** para
+  tentar de novo, e o CSV continua salvável. Lista com mais de 15.000 linhas: recusa local e orienta a
+  publicar parte e continuar.
 
-Fluxo: login (`signInWithPassword`, token em memória e renovado por `refreshToken`) → `POST
-documents/listas?documentId=<id>` com os campos da §3. Criar com `documentId` já existente devolve 409
-(ALREADY_EXISTS), que é o sinal de colisão.
+### 5.6 Sessão salva (retomada)
+A cada item aceito ou excluído, a sessão (código, configuração, itens) é gravada em `localStorage`. Se o
+Chrome do Android descartar a aba (ligação, outro app, falta de memória), nada se perde: ao reabrir, INICIO
+oferece **Retomar** ou **Descartar**. Publicar com sucesso, Cancelar e Descartar apagam a sessão salva.
+Sem `localStorage`, tudo funciona, só sem retomada.
 
-Sucesso: "Publicada (N linhas)", limpa a sessão. Falha (rede, auth, regra, 409 persistente): mostra o motivo e
-**mantém a lista na tela** para tentar de novo ou salvar o CSV. Lista vazia: o botão não faz nada.
-
-Configuração (única por aparelho, em `localStorage`): `apiKey` e `projectId` do Firebase, e e-mail/senha da
-conta escritora. A `apiKey` do Firebase não é segredo (a proteção está nas regras). A senha da conta escritora
-só consegue criar listas; é rotacionável trocando a senha no console. Sem configuração, Publicar avisa e abre
-os ajustes.
-
-### 5.6 Som
-Web Audio API, tons gerados no código, sem arquivos. O `AudioContext` é criado/retomado no clique do botão
-de câmera/galeria (gesto do usuário).
+### 5.7 Som
+Web Audio API, tons gerados no código, sem arquivos; `AudioContext` criado/retomado no toque do botão de
+câmera/galeria.
 
 - Sucesso: dois tons ascendentes curtos, junto da vibração `[40,40,60]` existente.
-- Erro: tom grave único mais longo, junto de vibração própria (`[120]`).
+- Erro: tom grave único mais longo, junto de vibração `[120]`.
 - Erro tocado **uma vez por valor** enquanto o mesmo valor continuar sendo lido na câmera (lê a cada
   ~320 ms). Na galeria, cada foto é independente.
 - Sem Web Audio ou áudio bloqueado: falha em silêncio.
 
-## 6. Lado ASIdoBem (especificação para quem mantém o Java)
+### 5.8 Remoções
+Modo Bateria inteiro (segmented control, pareamento, decoy `CDJE`, `ultimoCodigo`/`candidato`, `pendente`,
+confirmação de troca de modo, `gerarCsvBateria`, CSV `bateria_*`); leitura de código de barras;
+`diferencaPequena`, `ultimoPatrimonioAceito`, `LIMITE_DIFERENCA_PATRIMONIO`; `codigoTocaBorda` e
+`MARGEM_BORDA_FRACAO`. `FORMATOS_DESEJADOS` = `["qr_code"]`. A confirmação de "dados não exportados" some
+junto com os modos; sua função é substituída pelo Cancelar e pela retomada da sessão.
 
-Substitui `BuscaListas` (GET de índice/arquivo) por:
+## 6. Testes
 
-1. `POST https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<apiKey>` com e-mail/senha
-   da conta leitora → `idToken` (válido 1 h).
-2. `POST https://firestore.googleapis.com/v1/projects/<projectId>/databases/(default)/documents:runQuery`
-   com `Authorization: Bearer <idToken>`: coleção `listas`, `orderBy gerado_em desc`, `limit` configurável.
-3. Para cada documento: `id` = último segmento de `name`; `codigo` = `fields.codigo.stringValue`; ignora sem
-   baixar nada extra os de código que não é desta base; para os demais, `fields.csv.stringValue` é o conteúdo
-   que já entra em `receber` do `DAOListas`, sem SHA-256 (não há índice). A regra "id já recebido não volta"
-   continua valendo (`listas_recebidas.lista_id`). Se o conteúdo de um `id` já recebido for diferente,
-   conta como "mudou" (não deveria ocorrer: as regras proíbem update).
-4. Parsing JSON mínimo, sem dependência (as respostas têm forma fixa); `Config`: trocar `listas.endereco` /
-   `listas.token` por `projectId`, `apiKey`, e-mail e senha da conta leitora.
+Playwright (Python) com stubs de `BarcodeDetector` e câmera, como hoje; a API do GitHub é simulada com
+`page.route` (201, 422, 401, rede).
 
-O `ListaCSV`, a conferência, o `aplicar` e as telas permanecem como estão.
+- Fluxo: Iniciar → código inválido (4 dígitos, zeros) bloqueia → válido avança → configuração → câmera.
+- Aceitação (§5.3): barcode ignorado mesmo com valor válido; sem IDEQ silêncio; fora do padrão e repetido →
+  som de erro 1× por valor; aceito → som de sucesso e vibração; IDEQ puro gravado.
+- **Excluir último** remove da lista e do Set (o mesmo valor é aceito de novo); repetido remove vários.
+- **Cancelar**: confirmação, descarta sessão e câmera; volta a INICIO.
+- **Publicar**: CSV exato enviado (identificação, cabeçalho, ordem, `;`, base64 UTF-8 ↔ bytes); 201 limpa a
+  sessão e volta a INICIO; 422 incrementa `seq`; 401/rede mantêm a lista; sem token não inicia.
+- **Retomada**: recarregar a página no meio da leitura oferece Retomar com os mesmos itens e código.
+- **Link de configuração**: token guardado, fragmento removido da URL.
+- **Actions**: `gerar_indice.py` testado localmente com listas válidas e inválidas (formato, código, id≠nome,
+  cabeçalho, colunas); ordem e SHA-256 conferidos contra `sha256sum`.
+- Regressão: falha de câmera (getUserMedia e play), galeria, operações/parâmetros no CSV.
 
-## 7. Testes
+## 7. Documentação
 
-Playwright com stubs de `BarcodeDetector` e câmera, como hoje. Para o Firestore: **Firebase Emulator Suite**
-(Firestore + Auth) rodando local; o app aponta o `projectId`/endereço para o emulador em teste.
+Atualizar `CLAUDE.md` (Bateria e similaridade saem; fluxo guiado; operações; Publicar; repositório de
+listas; som; sessão salva), `MANUAL.md` (o passo a passo do técnico, incluindo o link de configuração e o
+significado dos sons) e `README.md` (repositório de listas, Actions, geração/renovação de tokens, endereço
+para o ASIdoBem). Deploy do app continua exigindo `git push origin master` com confirmação.
 
-- App: só QR (barcode ignorado, mesmo com valor válido); sem IDEQ ignorado; fora do padrão e repetido →
-  som de erro, 1× por valor; aceito → som de sucesso; dedup entre câmera e galeria; valor gravado é o IDEQ
-  puro; operações e parâmetros (zona, status) no CSV; nota limpa de `;`; conteúdo exato do CSV; lista em
-  tela na ordem do CSV; falha de câmera sem regressão.
-- Publicar: sucesso limpa a sessão; falha de rede/auth/regra mantém a lista; `id` sequencial após colisão.
-- Regras (emulador): escritora cria; escritora não altera nem apaga; leitora não cria; anônimo não lê nem
-  escreve; `id`/`codigo` divergentes do `csv` recusados; formato ≠ 1 recusado; documento > 1 MiB recusado.
-- Ponta a ponta: celular (Playwright) → emulador → consulta `runQuery` como o ASIdoBem faria, conferindo
-  que o `csv` lido é byte a byte o publicado.
+## 8. Riscos e decisões aceitas
 
-## 8. Documentação
-
-Atualizar `CLAUDE.md` (Bateria e similaridade saem; operações; Publicar; Firestore; som), `MANUAL.md`
-(escolher operação, publicar, sons, configuração do aparelho) e `README.md` (projeto Firebase, contas,
-regras, deploy). Deploy do app continua exigindo `git push origin master` com confirmação.
-
-## 9. Riscos e decisões aceitas
-
-- A senha da conta escritora fica no `localStorage` do celular: só cria listas; rotacionável.
-- Sem fila offline: a lista fica na tela até o envio dar certo (ou o CSV é salvo).
+- Quem tiver o token pode alterar/apagar listas **daquele repositório** (histórico do git permite
+  restaurar; token revogável por aparelho). Os dados já são públicos.
+- O código digitado errado não é detectável pelo app: o ASIdoBem ignora em silêncio listas de outros
+  códigos. Mitigação: o código fica grande na tela e na mensagem de sucesso.
+- Atraso de alguns minutos até a lista aparecer no ASIdoBem (Actions + cache do CDN).
+- Token vence em até 1 ano; o app avisa ao Iniciar, antes da coleta.
 - `4551` continua obrigatório; se a numeração mudar, ajustar `PADRAO_PATRIMONIO`.
-- O contrato permite STATUS/CADASTRAR etc. sem validar contra o cadastro: quem confere é o ASIdoBem.
-- O ASIdoBem **deixa de funcionar com o site antigo** (HTTP+índice) assim que trocar o transporte; como esse
-  site ainda não existia, não há migração.
+- A conferência final contra o cadastro é do ASIdoBem; o app não valida existência da urna.
