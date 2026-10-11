@@ -1,49 +1,47 @@
-# Leitor PAT & BAT — Polo 24
+# Leitor PAT — Polo 24
 
-Aplicativo web (single-page, sem build) para ler QR code e código de barras direto do navegador do
-celular — câmera ao vivo ou fotos da galeria — e exportar os dados lidos em CSV.
+Aplicativo web (arquivo único, sem build) para ler o QR Code oficial do TSE das urnas no navegador do
+celular, escolher a operação de cada urna e **publicar a lista** para o ASIdoBem.
 
 🔗 **App publicado:** https://jofilho71.github.io/leitor-qrcodes-android/
 
-## O que faz
+Manual da equipe: **[MANUAL.md](MANUAL.md)**. Detalhes para quem mexe no código: **[CLAUDE.md](CLAUDE.md)**.
 
-Dois modos de leitura, alternáveis no topo da tela:
+## Como funciona
 
-- **Bateria**: pareia um QR code (dados da etiqueta) com um código de barras (patrimônio da urna),
-  exportando o par em CSV.
-- **Inventário**: leitura solta de código de barras de patrimônio (padrão específico da empresa),
-  com categoria e nota, sem duplicar leituras na mesma sessão.
+```
+Celular (este app) ──PUT──► repositório público asidobem-listas: listas/<id>.csv
+                              GitHub Actions gera indice.csv (SHA-256)
+ASIdoBem ──GET──► https://raw.githubusercontent.com/jofilho71/asidobem-listas/main/indice.csv
+```
 
-Para instruções de uso passo a passo (modos, câmera, exportação, solução de problemas), veja o
-**[MANUAL.md](MANUAL.md)**.
+Formato das listas: ver `IMPORTACAO_WEB.md` (formato 1). No ASIdoBem: *Site…* → o endereço acima, token em
+branco.
 
 ## Stack
 
-- Um único arquivo autocontido: `index.html` (HTML + CSS + JS, sem framework, sem `package.json`, sem
-  bundler).
-- Detecção de código via `BarcodeDetector` nativo do navegador (Shape Detection API), com fallback para
-  [`jsQR`](https://github.com/cozmo/jsQR) via CDN quando o navegador não suporta a API nativa (nesse caso,
-  só QR code funciona — código de barras linear exige o detector nativo).
-- Exportação em CSV (download) e compartilhamento via Web Share API.
+- `index.html` único (HTML + CSS + JS), sem framework nem build.
+- `BarcodeDetector` nativo com fallback `jsQR` via CDN (só QR).
+- Publicação pela API de conteúdo do GitHub; sons por Web Audio.
 
-Não há dependências instaladas, não há etapa de build — o arquivo é editado e publicado direto.
+## Configuração (uma vez)
 
-## Deploy
+1. Criar o repositório público `jofilho71/asidobem-listas` com o conteúdo de `repositorio-listas/`.
+2. Em *Settings → Actions → General*, permitir que workflows tenham permissão de escrita.
+3. Gerar, em github.com/settings/tokens, um *fine-grained token* **por aparelho**: só o repositório
+   `asidobem-listas`, permissão *Contents: Read and write*, validade máxima.
+4. Enviar a cada técnico, em privado: `https://jofilho71.github.io/leitor-qrcodes-android/#cfg=<token>`.
+   Para revogar um aparelho, apague o token dele no GitHub. Tokens vencem em até 1 ano.
 
-Hospedado via **GitHub Pages**, servindo `index.html` a partir da branch `master`.
+## Deploy do app
+
+GitHub Pages serve o `index.html` da branch `master`. Um commit local não atualiza o site: é preciso
+`git push origin master`; aguarde 1–2 min e recarregue com Ctrl+Shift+R.
+
+## Testes
 
 ```bash
-git add index.html
-git commit -m "..."
-git push origin master
+python3 -m pip install -r requirements-teste.txt
+python3 -m playwright install chromium
+python3 -m pytest tests -v
 ```
-
-⚠️ **O commit sozinho não atualiza o site** — é preciso dar `push` para o `master` no GitHub. Depois do
-push, o GitHub Pages leva 1–2 minutos para reconstruir; se a página parecer não ter mudado, aguarde um
-pouco e recarregue com cache limpo (Ctrl+Shift+R).
-
-## Documentação
-
-- **[CLAUDE.md](CLAUDE.md)** — regras de negócio, decisões de design e convenções do código, para quem for
-  alterar o app (documentação técnica/de desenvolvimento).
-- **[MANUAL.md](MANUAL.md)** — manual de uso para a equipe operacional (Polo 24), em linguagem simples.
