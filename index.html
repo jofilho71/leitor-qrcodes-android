@@ -169,6 +169,14 @@
       <button class="btn-texto" id="btn-retomar" type="button">Retomar</button>
       <button class="btn-texto sec" id="btn-descartar" type="button">Descartar</button>
     </div>
+    <button class="btn-texto sec" id="btn-ajustes" type="button">Ajustes</button>
+    <div id="painel-ajustes" hidden>
+      <p class="aviso" id="estado-token"></p>
+      <input type="text" id="input-token" placeholder="Colar token" autocomplete="off">
+      <p class="msg-erro" id="erro-token"></p>
+      <button class="btn-texto" id="btn-token-salvar" type="button">Guardar token</button>
+      <button class="btn-texto sec" id="btn-token-apagar" type="button">Apagar token</button>
+    </div>
   </section>
 
   <section class="tela" id="tela-codigo" hidden>
@@ -317,6 +325,13 @@
   const textoRetomar = $("texto-retomar");
   const btnRetomar = $("btn-retomar");
   const btnDescartar = $("btn-descartar");
+  const btnAjustes = $("btn-ajustes");
+  const painelAjustes = $("painel-ajustes");
+  const estadoToken = $("estado-token");
+  const inputToken = $("input-token");
+  const erroToken = $("erro-token");
+  const btnTokenSalvar = $("btn-token-salvar");
+  const btnTokenApagar = $("btn-token-apagar");
 
   const ICONE_CAMERA = iconeCamera.innerHTML;
   const ICONE_PARAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></svg>';
@@ -327,6 +342,9 @@
   const CODIGO_VALIDO = /^[1-9]\d{4}$/;
   const INTERVALO_MS = 320;
   const JANELA_REPETIDO_MS = 2000;
+  const REPO = "jofilho71/asidobem-listas";
+  const API = "https://api.github.com/repos/" + REPO;
+  const RE_TOKEN = /^[A-Za-z0-9_\-]{20,255}$/;
 
   let tela = "inicio";          // "inicio" | "codigo" | "config" | "leitura"
   let sessao = null;            // {codigo, responsavel, local, itens: [{codigo, operacao, descricao}]}
@@ -423,10 +441,22 @@
     if (nome === "inicio") prepararInicio();
   }
 
-  btnIniciar.addEventListener("click", () => {
+  btnIniciar.addEventListener("click", async () => {
     prepararAudio();
+    btnIniciar.disabled = true;
+    avisoInicio.textContent = "Verificando…";
+    const estado = await verificarToken();
+    btnIniciar.disabled = false;
+    if (estado === "ausente") {
+      avisoInicio.textContent = "Token ausente. Peça o link de configuração.";
+      return;
+    }
+    if (estado === "invalido") {
+      avisoInicio.textContent = "Token vencido ou sem permissão de escrita. Peça um novo link de configuração.";
+      return;
+    }
     avisoInicio.textContent = "";
-    erroCodigo.textContent = "";
+    erroCodigo.textContent = estado === "offline" ? "Sem conexão: confira antes de publicar." : "";
     inputCodigo.value = "";
     irPara("codigo");
     inputCodigo.focus();
@@ -951,6 +981,64 @@
     el.addEventListener("change", () => { if (tela === "leitura") salvarSessao(); });
   });
 
+  // ---------- token do GitHub ----------
+  function cabecalhosGithub(token) {
+    return { "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json" };
+  }
+
+  // "ausente" | "invalido" | "offline" | "ok". 401/403/404 ou permissão de escrita explicitamente
+  // negada = inválido; falha de rede/5xx = offline (não impede a coleta em campo)
+  async function verificarToken() {
+    const token = LS.ler("lq.token");
+    if (!token) return "ausente";
+    try {
+      const r = await fetch(API, { headers: cabecalhosGithub(token) });
+      if (r.status === 401 || r.status === 403 || r.status === 404) return "invalido";
+      if (!r.ok) return "offline";
+      const j = await r.json().catch(() => ({}));
+      if (j.permissions && j.permissions.push === false) return "invalido";
+      return "ok";
+    } catch (e) { return "offline"; }
+  }
+
+  function aplicarLinkDeConfiguracao() {
+    const m = /^#cfg=(.+)$/.exec(location.hash);
+    if (!m) return;
+    let token = m[1];
+    try { token = decodeURIComponent(token); } catch (e) { /* usa como veio */ }
+    // o token nunca fica na barra de endereço nem no histórico
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+    if (!RE_TOKEN.test(token)) { avisoInicio.textContent = "Link de configuração inválido."; return; }
+    LS.gravar("lq.token", token);
+    avisoInicio.textContent = "Aparelho configurado.";
+  }
+
+  function atualizarEstadoToken() {
+    estadoToken.textContent = LS.ler("lq.token") ? "Token configurado." : "Sem token.";
+  }
+
+  btnAjustes.addEventListener("click", () => {
+    painelAjustes.hidden = !painelAjustes.hidden;
+    erroToken.textContent = "";
+    inputToken.value = "";
+    atualizarEstadoToken();
+  });
+
+  btnTokenSalvar.addEventListener("click", () => {
+    const token = inputToken.value.trim();
+    if (!RE_TOKEN.test(token)) { erroToken.textContent = "Token inválido."; return; }
+    erroToken.textContent = "";
+    LS.gravar("lq.token", token);
+    inputToken.value = "";
+    atualizarEstadoToken();
+  });
+
+  btnTokenApagar.addEventListener("click", () => {
+    LS.apagar("lq.token");
+    atualizarEstadoToken();
+  });
+
+  aplicarLinkDeConfiguracao();
   irPara("inicio");
 })();
 </script>
