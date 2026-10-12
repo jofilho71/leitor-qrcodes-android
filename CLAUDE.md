@@ -39,8 +39,13 @@ itens:[{codigo, operacao, descricao}]}` e `codigosVistos` (Set).
 
 1. **Iniciar** verifica o token do aparelho (`verificarToken`: `GET` no repositório de listas; `permissions.push`
    explicitamente falso, 401/403/404 → bloqueia; rede/5xx → segue com aviso).
-2. **Código** do ASIdoBem: 5 dígitos, `/^[1-9]\d{4}$/`. Aparece discreto no topo (decisão do usuário: menos espaço).
-   Lista com código errado não é lida pelo ASIdoBem, mas continua no repositório para conferência offline.
+2. **Código** do ASIdoBem: 5 dígitos, `/^[1-9]\d{4}$/`. Aparece discreto no topo (decisão do usuário: menos espaço;
+   **não** mostrar grande em lugar nenhum). Lista com código errado não é lida pelo ASIdoBem, mas continua no
+   repositório para conferência offline. **Digitado uma vez, no começo do trabalho** (decisão do usuário,
+   2026-10-11): fica em `localStorage` (`lq.codigo` = `{codigo, dia}`); **Iniciar** com código de hoje pula a
+   tela de código e vai a `config`; de outro dia, a tela de código vem preenchida com um aviso para confirmar ou
+   trocar (ASIdoBem ignora lista de código encerrado sem avisar). Trocar = **Voltar** na `config`. Publicar e
+   *Excluir tudo* não apagam o código; valor guardado malformado é ignorado.
 3. **Config**: operação inicial (e zona, se Transferir; zona inválida bloqueia). **Não há** responsável nem local:
    o código já identifica a origem (removidos a pedido do usuário).
 4. **Leitura**: câmera/galeria. Operação, zona/status e nota podem mudar durante a leitura (uma lista pode

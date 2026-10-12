@@ -12,11 +12,16 @@ Para quem lê as urnas em campo. Sem termos técnicos.
 ## Fazendo uma leitura
 
 1. Abra o app e toque em **Iniciar**.
-2. Digite o **código de 5 dígitos** que o ASIdoBem mostrou. Confira: ele aparece grande no alto da tela
-   pequeno no alto da tela. Se estiver errado, o ASIdoBem **não lê a sua lista automaticamente**
+2. Digite o **código de 5 dígitos** que o ASIdoBem mostrou. **Só uma vez, no começo do trabalho**: o
+   aparelho guarda o código e, nas próximas listas, o app vai direto para a escolha da ação. Confira o
+   código, pequeno no alto da tela. Se estiver errado, o ASIdoBem **não lê a sua lista automaticamente**
    (o arquivo continua guardado para conferência).
+   - **Trocar o código:** na escolha da ação, toque em **Voltar**, digite o novo e **Continuar**.
+   - **Dia novo:** no primeiro **Iniciar** de outro dia o app mostra o código guardado e pede para
+     confirmar ou digitar outro (a coleta pode ter terminado e o código ter sido encerrado).
 3. Escolha a **ação**:
-   - **Transferir** — a urna vai para outra zona (digite o número, ex.: 59) ou para o polo.
+   - **Transferir** — a urna vai para outra zona (digite só o número, ex.: 59, sem a palavra "Zona") ou
+     para o polo (digite POLO).
    - **Emprestar** — a urna foi emprestada.
    - **Status** — escolha **Laudo**, **Defeito** ou **Pronta**. A urna não muda de lugar. (Laudo e Defeito
      registram a urna como defeituosa; o Laudo acrescenta a marca "LAUDO" na descrição.)

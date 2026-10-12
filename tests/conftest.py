@@ -164,8 +164,11 @@ class App:
     def iniciar(self, codigo="48213", operacao="EMPRESTAR"):
         p = self.page
         p.click("#btn-iniciar")
-        p.fill("#input-codigo", codigo)
-        p.click("#btn-codigo-ok")
+        # com código guardado de hoje o leitor pula a tela de código
+        p.wait_for_selector("#tela-codigo:not([hidden]), #tela-config:not([hidden])")
+        if p.is_visible("#tela-codigo"):
+            p.fill("#input-codigo", codigo)
+            p.click("#btn-codigo-ok")
         p.select_option("#select-operacao", operacao)
         p.click("#btn-config-ok")
         p.wait_for_selector("#tela-leitura:not([hidden])")

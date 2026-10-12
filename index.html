@@ -166,6 +166,7 @@
   <section class="tela" id="tela-inicio">
     <button class="btn-texto" id="btn-iniciar" type="button">Iniciar</button>
     <p class="aviso" id="aviso-inicio"></p>
+    <p class="aviso" id="codigo-atual"></p>
     <div id="caixa-retomar" hidden>
       <p class="aviso" id="texto-retomar"></p>
       <button class="btn-texto" id="btn-retomar" type="button">Retomar</button>
@@ -183,6 +184,7 @@
 
   <section class="tela" id="tela-codigo" hidden>
     <label class="rotulo" for="input-codigo">Código do ASIdoBem</label>
+    <p class="aviso" id="aviso-codigo"></p>
     <input type="text" id="input-codigo" inputmode="numeric" autocomplete="off" placeholder="5 dígitos">
     <p class="msg-erro" id="erro-codigo"></p>
     <button class="btn-texto" id="btn-codigo-ok" type="button">Continuar</button>
@@ -283,6 +285,8 @@
   const avisoInicio = $("aviso-inicio");
   const inputCodigo = $("input-codigo");
   const erroCodigo = $("erro-codigo");
+  const avisoCodigo = $("aviso-codigo");
+  const codigoAtualEl = $("codigo-atual");
   const btnCodigoOk = $("btn-codigo-ok");
   const btnCodigoVoltar = $("btn-codigo-voltar");
   const slotConfig = $("slot-config");
@@ -366,6 +370,28 @@
     gravar(chave, valor) { try { localStorage.setItem(chave, JSON.stringify(valor)); } catch (e) {} },
     apagar(chave) { try { localStorage.removeItem(chave); } catch (e) {} }
   };
+
+  // ---------- código do ASIdoBem guardado (digitado uma vez, no começo do trabalho) ----------
+  // vale até alguém trocar; num dia novo o leitor pede para confirmar (a coleta pode ter acabado
+  // e o ASIdoBem ignora lista de código encerrado sem avisar quem coletou)
+  function hojeISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function dataBR(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso));
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso);
+  }
+
+  // {codigo, dia} guardado, ou null se não há ou está malformado
+  function codigoGuardado() {
+    const g = LS.ler("lq.codigo");
+    if (!g || typeof g !== "object" || typeof g.codigo !== "string" || !CODIGO_VALIDO.test(g.codigo)) return null;
+    return { codigo: g.codigo, dia: typeof g.dia === "string" ? g.dia : "" };
+  }
+
+  function guardarCodigo(codigo) { LS.gravar("lq.codigo", { codigo, dia: hojeISO() }); }
 
   // ---------- utilidades ----------
   // escapa o conteúdo lido antes de injetar via innerHTML: o valor vem direto do QR
@@ -460,8 +486,19 @@
       return;
     }
     avisoInicio.textContent = "";
-    erroCodigo.textContent = estado === "offline" ? "Sem conexão: confira antes de publicar." : "";
-    inputCodigo.value = "";
+    const msgOffline = estado === "offline" ? "Sem conexão: confira antes de publicar." : "";
+    const g = codigoGuardado();
+    if (g && g.dia === hojeISO()) {
+      // código de hoje já guardado: direto para a configuração
+      erroConfig.textContent = msgOffline;
+      sessao = { codigo: g.codigo, itens: [] };
+      codigosVistos = new Set();
+      irPara("config");
+      return;
+    }
+    erroCodigo.textContent = msgOffline;
+    avisoCodigo.textContent = g ? `Código ${g.codigo} guardado em ${dataBR(g.dia)}. Continue com ele ou digite outro.` : "";
+    inputCodigo.value = g ? g.codigo : "";
     irPara("codigo");
     inputCodigo.focus();
   });
@@ -476,15 +513,21 @@
     }
     erroCodigo.textContent = "";
     erroConfig.textContent = "";
+    guardarCodigo(codigo);
     sessao = { codigo, itens: [] };
     codigosVistos = new Set();
     irPara("config");
   });
 
   btnConfigVoltar.addEventListener("click", () => {
+    const atual = sessao ? sessao.codigo : "";
     sessao = null;
     codigosVistos = new Set();
+    erroCodigo.textContent = "";
+    avisoCodigo.textContent = "";
+    inputCodigo.value = atual;   // trocar o código: o atual já vem preenchido
     irPara("codigo");
+    inputCodigo.focus();
   });
 
   btnConfigOk.addEventListener("click", () => {
@@ -954,6 +997,8 @@
       if (s !== null) LS.apagar("lq.sessao");
     }
     btnIniciar.hidden = !caixaRetomar.hidden;
+    const g = codigoGuardado();
+    codigoAtualEl.textContent = g ? `Código atual: ${g.codigo}` : "";
   }
 
   btnRetomar.addEventListener("click", () => {
