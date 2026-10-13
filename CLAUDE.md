@@ -46,8 +46,8 @@ itens:[{codigo, operacao, descricao}]}` e `codigosVistos` (Set).
    tela de código e vai a `config`; de outro dia, a tela de código vem preenchida com um aviso para confirmar ou
    trocar (ASIdoBem ignora lista de código encerrado sem avisar). Trocar = **Voltar** na `config`. Publicar e
    *Excluir tudo* não apagam o código; valor guardado malformado é ignorado.
-3. **Config**: operação inicial (e zona, se Transferir). **A zona não é validada** (decisão do usuário,
-   2026-10-13: o ASIdoBem confere): `normalizarDestino` só converte o que é claramente zona em `Z<n>` e manda
+3. **Config**: operação inicial (e zona, se Transferir). **A zona não é validada, só não pode ficar
+   vazia** (decisão do usuário, 2026-10-13: o ASIdoBem confere; vazia bloqueia a config e dá erro na leitura): `normalizarDestino` só converte o que é claramente zona em `Z<n>` e manda
    o resto como digitado (maiúsculas, sem `;`). **Não há** responsável nem local:
    o código já identifica a origem (removidos a pedido do usuário).
 4. **Leitura**: câmera/galeria. Operação, zona/status e nota podem mudar durante a leitura (uma lista pode

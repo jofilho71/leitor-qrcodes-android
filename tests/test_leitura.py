@@ -215,9 +215,9 @@ def test_laudo_vai_como_defeituosa_com_descricao_laudo(app):
     ("161", "Z161"), ("Z161", "Z161"), ("z161", "Z161"), ("Zona 161", "Z161"), ("zona161", "Z161"),
     ("Z 161", "Z161"), ("Z-161", "Z161"), ("ZE161", "Z161"), ("161ª", "Z161"), (" 059 ", "Z59"), ("Polo", "POLO"),
     # sem validação: o resto vai como digitado (em maiúsculas, sem ";"), o ASIdoBem confere
-    ("abc", "ABC"), ("1 61", "1 61"), ("Zona 1000", "ZONA 1000"), ("a;b", "A B"), ("", ""),
+    ("abc", "ABC"), ("1 61", "1 61"), ("Zona 1000", "ZONA 1000"), ("a;b", "A B"),
 ])
-def test_zona_nunca_e_recusada(app, zona, esperado):
+def test_zona_so_nao_pode_ser_vazia(app, zona, esperado):
     lendo(app)
     p = app.page
     p.select_option("#select-operacao", "TRANSFERIR")
@@ -225,3 +225,19 @@ def test_zona_nunca_e_recusada(app, zona, esperado):
     app.enfileirar([App.det_qr("51000001")])
     app.esperar_fila()
     assert app.itens() == [["51000001", "TRANSFERIR:" + esperado]]
+
+
+@pytest.mark.parametrize("zona", ["", "   ", ";"])
+def test_zona_vazia_recusa_e_preencher_aceita_a_mesma_urna(app, zona):
+    lendo(app)
+    p = app.page
+    p.select_option("#select-operacao", "TRANSFERIR")
+    p.fill("#input-zona", zona)
+    app.enfileirar([App.det_qr("51000001")])
+    app.esperar_fila()
+    assert app.itens() == []
+    assert "invalido" in p.get_attribute("#input-zona", "class")
+    p.fill("#input-zona", "161")
+    app.enfileirar([App.det_qr("51000001")])
+    app.esperar_fila()
+    assert app.itens() == [["51000001", "TRANSFERIR:Z161"]]

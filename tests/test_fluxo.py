@@ -95,3 +95,27 @@ def test_operacao_visivel_ja_na_configuracao(app):
     app.page.fill("#input-codigo", "48213")
     app.page.click("#btn-codigo-ok")
     assert app.page.is_visible("#slot-config #bloco-operacao")
+
+
+def test_campo_de_zona_aparece_com_transferir_ja_selecionado(app):
+    # Transferir é a primeira opção: o campo de zona tem de aparecer sem o usuário trocar a operação
+    app.abrir()
+    app.page.click("#btn-iniciar")
+    app.page.fill("#input-codigo", "48213")
+    app.page.click("#btn-codigo-ok")
+    assert app.page.input_value("#select-operacao") == "TRANSFERIR"
+    assert app.page.is_visible("#input-zona")
+    app.page.fill("#input-zona", "Z161")
+    app.page.click("#btn-config-ok")
+    assert app.page.is_visible("#input-zona")
+
+
+def test_transferir_com_zona_vazia_nao_comeca_a_leitura(app):
+    app.abrir()
+    app.page.click("#btn-iniciar")
+    app.page.fill("#input-codigo", "48213")
+    app.page.click("#btn-codigo-ok")
+    app.page.fill("#input-zona", "  ")
+    app.page.click("#btn-config-ok")
+    assert app.page.is_visible("#tela-config")
+    assert "zona" in app.page.inner_text("#erro-config")

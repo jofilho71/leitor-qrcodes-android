@@ -57,6 +57,7 @@
     border-radius: 8px; padding: 10px 10px; font-size: 14px; font-family: var(--sans);
     width: 100%; margin-top: 8px;
   }
+  input.invalido { border-color: var(--err) !important; }
   .rotulo { display: block; margin-top: 6px; font-size: 12.5px; color: var(--ink-dim); }
   .btn-texto {
     display: block; width: 100%; height: 46px; margin-top: 10px; cursor: pointer;
@@ -156,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.4.1)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.4.2)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -417,9 +418,13 @@
   }
 
   // operação do contrato conforme os campos da tela
+  // única regra da zona (decisão do usuário): não pode ficar vazia; null nesse caso
   function operacaoAtual() {
     const op = selectOperacao.value;
-    if (op === "TRANSFERIR") return "TRANSFERIR:" + normalizarDestino(inputZona.value);
+    if (op === "TRANSFERIR") {
+      const destino = normalizarDestino(inputZona.value);
+      return destino ? "TRANSFERIR:" + destino : null;
+    }
     if (op === "STATUS") return "STATUS:" + STATUS_OFICIAL[selectStatus.value];
     return op;
   }
@@ -438,6 +443,7 @@
     selectStatus.hidden = selectOperacao.value !== "STATUS";
   }
   selectOperacao.addEventListener("change", atualizarCamposOperacao);
+  inputZona.addEventListener("input", () => inputZona.classList.remove("invalido"));
 
   function mostrarErroTemporario(msg, ms) {
     erroCamera.textContent = msg;
@@ -457,6 +463,8 @@
     codigoGrande.hidden = !(sessao && (nome === "config" || nome === "leitura"));
     if (sessao) codigoGrande.textContent = "Código " + sessao.codigo;
     (nome === "config" ? slotConfig : slotLeitura).appendChild(blocoOperacao);
+    // Transferir já vem selecionado sem evento "change": sem isto o campo de zona fica oculto
+    atualizarCamposOperacao();
     if (nome !== "leitura") pararCamera();
     if (nome === "leitura") atualizarEstadoVisual();
     atualizarContador();
@@ -523,6 +531,12 @@
   });
 
   btnConfigOk.addEventListener("click", () => {
+    if (!operacaoAtual()) {
+      inputZona.classList.add("invalido");
+      erroConfig.textContent = "Digite a zona (ex.: 161) ou POLO.";
+      inputZona.focus();
+      return;
+    }
     erroConfig.textContent = "";
     irPara("leitura");
   });
@@ -669,8 +683,14 @@
       mostrarErroTemporario(`Limite de ${MAX_LINHAS_PUBLICACAO} itens por lista: publique esta e comece outra.`, 8000);
       return rejeitar();
     }
+    const operacao = operacaoAtual();
+    if (!operacao) {
+      inputZona.classList.add("invalido");
+      mostrarErroTemporario("Digite a zona (ex.: 161) ou POLO.");
+      return rejeitar();
+    }
     codigosVistos.add(patrimonio);
-    sessao.itens.push({ codigo: patrimonio, operacao: operacaoAtual(), descricao: descricaoAtual() });
+    sessao.itens.push({ codigo: patrimonio, operacao, descricao: descricaoAtual() });
     salvarSessao();
     atualizarContador();
     sinalizar("sucesso");
