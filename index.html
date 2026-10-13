@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.3)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.4)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -206,7 +206,7 @@
           <option value="EMPRESTAR">Emprestar</option>
           <option value="STATUS">Status</option>
         </select>
-        <input type="text" id="input-zona" maxlength="6" placeholder="Zona (59) ou POLO" autocomplete="off" hidden>
+        <input type="text" id="input-zona" maxlength="20" placeholder="Zona (ex.: 161) ou POLO" autocomplete="off" hidden>
         <select id="select-status" hidden>
           <option>Laudo</option>
           <option>Defeito</option>
@@ -404,14 +404,15 @@
 
   function pad2(n) { return String(n).padStart(2, "0"); }
 
-  // zona ("59", "Z059", "z59") -> "Z59"; "polo" -> "POLO"; qualquer outra coisa -> null
+  // zona ("161", "Z059", "z 161", "Zona 161", "ZE-161", "161ª") -> "Z<n>"; "polo" -> "POLO"; qualquer outra coisa -> null
   function normalizarDestino(texto) {
     const t = String(texto || "").trim().toUpperCase();
     if (t === "POLO") return "POLO";
-    const m = /^Z?(\d{1,3})$/.exec(t);
-    if (!m) return null;
-    const n = parseInt(m[1], 10);
-    return n > 0 ? "Z" + n : null;
+    const numeros = t.match(/\d+/g);
+    if (!numeros || numeros.length !== 1) return null;
+    if (!["", "Z", "ZE", "ZONA"].includes(t.replace(/[^A-Z]/g, ""))) return null;
+    const n = parseInt(numeros[0], 10);
+    return n > 0 && n <= 999 ? "Z" + n : null;
   }
 
   // a descrição vai numa coluna do CSV: sem ";" nem quebra de linha, até 200 caracteres
@@ -533,7 +534,7 @@
   btnConfigOk.addEventListener("click", () => {
     if (!operacaoAtual()) {
       inputZona.classList.add("invalido");
-      erroConfig.textContent = "Zona inválida: use 59 ou POLO.";
+      erroConfig.textContent = "Zona inválida: digite o número da zona (ex.: 161) ou POLO.";
       return;
     }
     erroConfig.textContent = "";
@@ -1013,7 +1014,7 @@
     const op = s.op || {};
     if (Array.from(selectOperacao.options).some(o => o.value === op.operacao)) selectOperacao.value = op.operacao;
     if (Array.from(selectStatus.options).some(o => o.value === op.status)) selectStatus.value = op.status;
-    inputZona.value = typeof op.zona === "string" ? op.zona.slice(0, 6) : "";
+    inputZona.value = typeof op.zona === "string" ? op.zona.slice(0, 20) : "";
     textoLivre.value = typeof op.nota === "string" ? op.nota.slice(0, 200) : "";
     atualizarCamposOperacao();
     irPara("leitura");

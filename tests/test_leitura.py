@@ -224,3 +224,28 @@ def test_laudo_vai_como_defeituosa_com_descricao_laudo(app):
         "51000003;STATUS:Defeituosa;lacre 7",
         "51000004;STATUS:Pronta;",
     ]
+
+
+@pytest.mark.parametrize("zona, esperado", [
+    ("161", "Z161"), ("Z161", "Z161"), ("z161", "Z161"), ("Zona 161", "Z161"), ("zona161", "Z161"),
+    ("Z 161", "Z161"), ("Z-161", "Z161"), ("ZE161", "Z161"), ("161ª", "Z161"), (" 059 ", "Z59"), ("Polo", "POLO"),
+])
+def test_zona_aceita_grafias_comuns(app, zona, esperado):
+    lendo(app)
+    p = app.page
+    p.select_option("#select-operacao", "TRANSFERIR")
+    p.fill("#input-zona", zona)
+    app.enfileirar([App.det_qr("51000001")])
+    app.esperar_fila()
+    assert app.itens() == [["51000001", "TRANSFERIR:" + esperado]]
+
+
+@pytest.mark.parametrize("zona", ["0", "Z0", "1000", "1 61", "Zona 16 1", "X161", "161 POLO", "PO"])
+def test_zona_recusa_o_que_nao_e_zona(app, zona):
+    lendo(app)
+    p = app.page
+    p.select_option("#select-operacao", "TRANSFERIR")
+    p.fill("#input-zona", zona)
+    app.enfileirar([App.det_qr("51000001")])
+    app.esperar_fila()
+    assert app.itens() == []
