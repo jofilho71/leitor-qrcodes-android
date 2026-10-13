@@ -58,7 +58,6 @@
     width: 100%; margin-top: 8px;
   }
   .rotulo { display: block; margin-top: 6px; font-size: 12.5px; color: var(--ink-dim); }
-  input.invalido { border-color: var(--err) !important; }
   .btn-texto {
     display: block; width: 100%; height: 46px; margin-top: 10px; cursor: pointer;
     border: 1.5px solid var(--accent); background: var(--accent); color: var(--accent-ink);
@@ -157,7 +156,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.4)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.4.1)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -404,15 +403,12 @@
 
   function pad2(n) { return String(n).padStart(2, "0"); }
 
-  // zona ("161", "Z059", "z 161", "Zona 161", "ZE-161", "161ª") -> "Z<n>"; "polo" -> "POLO"; qualquer outra coisa -> null
+  // destino sem validação (decisão do usuário: o ASIdoBem confere). Só ajusta o que for claramente zona
+  // ("161", "Zona 161", "z-059" -> "Z161"/"Z59"); qualquer outro texto vai como digitado, em maiúsculas
   function normalizarDestino(texto) {
-    const t = String(texto || "").trim().toUpperCase();
-    if (t === "POLO") return "POLO";
-    const numeros = t.match(/\d+/g);
-    if (!numeros || numeros.length !== 1) return null;
-    if (!["", "Z", "ZE", "ZONA"].includes(t.replace(/[^A-Z]/g, ""))) return null;
-    const n = parseInt(numeros[0], 10);
-    return n > 0 && n <= 999 ? "Z" + n : null;
+    const t = limparDescricao(texto).toUpperCase();
+    const m = /^(?:Z|ZE|ZONA)?[\s.\-]*0*(\d{1,3})\s*[ªº°]?$/.exec(t);
+    return m ? "Z" + m[1] : t;
   }
 
   // a descrição vai numa coluna do CSV: sem ";" nem quebra de linha, até 200 caracteres
@@ -420,13 +416,10 @@
     return String(texto || "").replace(/[;\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
   }
 
-  // operação do contrato conforme os campos da tela; null se faltar/for inválido o parâmetro
+  // operação do contrato conforme os campos da tela
   function operacaoAtual() {
     const op = selectOperacao.value;
-    if (op === "TRANSFERIR") {
-      const destino = normalizarDestino(inputZona.value);
-      return destino ? "TRANSFERIR:" + destino : null;
-    }
+    if (op === "TRANSFERIR") return "TRANSFERIR:" + normalizarDestino(inputZona.value);
     if (op === "STATUS") return "STATUS:" + STATUS_OFICIAL[selectStatus.value];
     return op;
   }
@@ -443,10 +436,8 @@
   function atualizarCamposOperacao() {
     inputZona.hidden = selectOperacao.value !== "TRANSFERIR";
     selectStatus.hidden = selectOperacao.value !== "STATUS";
-    inputZona.classList.remove("invalido");
   }
   selectOperacao.addEventListener("change", atualizarCamposOperacao);
-  inputZona.addEventListener("input", () => inputZona.classList.remove("invalido"));
 
   function mostrarErroTemporario(msg, ms) {
     erroCamera.textContent = msg;
@@ -532,11 +523,6 @@
   });
 
   btnConfigOk.addEventListener("click", () => {
-    if (!operacaoAtual()) {
-      inputZona.classList.add("invalido");
-      erroConfig.textContent = "Zona inválida: digite o número da zona (ex.: 161) ou POLO.";
-      return;
-    }
     erroConfig.textContent = "";
     irPara("leitura");
   });
@@ -683,11 +669,8 @@
       mostrarErroTemporario(`Limite de ${MAX_LINHAS_PUBLICACAO} itens por lista: publique esta e comece outra.`, 8000);
       return rejeitar();
     }
-    const operacao = operacaoAtual();
-    if (!operacao) { inputZona.classList.add("invalido"); return rejeitar(); }
-
     codigosVistos.add(patrimonio);
-    sessao.itens.push({ codigo: patrimonio, operacao, descricao: descricaoAtual() });
+    sessao.itens.push({ codigo: patrimonio, operacao: operacaoAtual(), descricao: descricaoAtual() });
     salvarSessao();
     atualizarContador();
     sinalizar("sucesso");

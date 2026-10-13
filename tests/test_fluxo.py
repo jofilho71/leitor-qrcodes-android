@@ -50,15 +50,15 @@ def test_nao_ha_campos_de_responsavel_nem_local(app):
     assert app.page.query_selector("#input-local") is None
 
 
-def test_transferir_sem_zona_valida_nao_comeca_a_leitura(app):
+def test_transferir_comeca_a_leitura_com_qualquer_zona(app):
     app.abrir()
     app.page.click("#btn-iniciar")
     app.page.fill("#input-codigo", "48213")
     app.page.click("#btn-codigo-ok")
     app.page.select_option("#select-operacao", "TRANSFERIR")
+    app.page.fill("#input-zona", "qualquer coisa")
     app.page.click("#btn-config-ok")
-    assert app.page.is_visible("#tela-config")
-    assert "Zona" in app.page.inner_text("#erro-config")
+    assert app.page.is_visible("#tela-leitura")
 
 
 def test_operacoes_oferecidas(app):

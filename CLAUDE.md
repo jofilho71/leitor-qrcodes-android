@@ -46,7 +46,9 @@ itens:[{codigo, operacao, descricao}]}` e `codigosVistos` (Set).
    tela de código e vai a `config`; de outro dia, a tela de código vem preenchida com um aviso para confirmar ou
    trocar (ASIdoBem ignora lista de código encerrado sem avisar). Trocar = **Voltar** na `config`. Publicar e
    *Excluir tudo* não apagam o código; valor guardado malformado é ignorado.
-3. **Config**: operação inicial (e zona, se Transferir; zona inválida bloqueia). **Não há** responsável nem local:
+3. **Config**: operação inicial (e zona, se Transferir). **A zona não é validada** (decisão do usuário,
+   2026-10-13: o ASIdoBem confere): `normalizarDestino` só converte o que é claramente zona em `Z<n>` e manda
+   o resto como digitado (maiúsculas, sem `;`). **Não há** responsável nem local:
    o código já identifica a origem (removidos a pedido do usuário).
 4. **Leitura**: câmera/galeria. Operação, zona/status e nota podem mudar durante a leitura (uma lista pode
    misturar operações). Rodapé: Excluir último (vermelho claro), Excluir tudo (`btn-cancelar`, vermelho escuro, confirma), Salvar,
@@ -61,8 +63,7 @@ itens:[{codigo, operacao, descricao}]}` e `codigosVistos` (Set).
 3. `"45"+IDEQ` fora de `PADRAO_PATRIMONIO = /^4551\d{6}$/` → **erro** (som + vibração).
 4. `IDEQ` já em `codigosVistos` → **erro**. É a **única regra de recusa por repetição**; não há mais checagem de
    semelhança entre patrimônios (removida a pedido do usuário) nem dedup por tempo/janela para aceitação.
-5. Operação inválida (zona de `TRANSFERIR` mal formada) → erro; a urna não entra no Set (corrigir a zona e reler aceita).
-6. Aceito: grava o `IDEQ` **puro** (8 dígitos, sem prefixo) com operação e nota atuais.
+5. Aceito: grava o `IDEQ` **puro** (8 dígitos, sem prefixo) com operação e nota atuais.
 
 Som/vibração: sucesso `[40,40,60]` + tons 880/1320 Hz; erro `[120]` + tom 180 Hz. Erro soa **uma vez por valor**
 enquanto o mesmo QR continua na câmera (`recente`, janela de 2 s) — a câmera lê a cada ~320 ms. Na galeria cada

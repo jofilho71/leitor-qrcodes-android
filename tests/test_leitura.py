@@ -131,21 +131,6 @@ def test_operacoes_e_parametros(app):
     ]
 
 
-def test_zona_invalida_nao_aceita_e_corrigir_aceita_a_mesma_urna(app):
-    lendo(app)
-    p = app.page
-    p.select_option("#select-operacao", "TRANSFERIR")
-    p.fill("#input-zona", "abc")
-    app.enfileirar([App.det_qr("51000001")])
-    app.esperar_fila()
-    assert app.itens() == []
-    assert "invalido" in p.get_attribute("#input-zona", "class")
-    p.fill("#input-zona", "z012")
-    app.enfileirar([App.det_qr("51000001")])
-    app.esperar_fila()
-    assert app.itens() == [["51000001", "TRANSFERIR:Z12"]]
-
-
 def test_csv_formato_1(app):
     lendo(app, codigo="48213")
     p = app.page
@@ -229,8 +214,10 @@ def test_laudo_vai_como_defeituosa_com_descricao_laudo(app):
 @pytest.mark.parametrize("zona, esperado", [
     ("161", "Z161"), ("Z161", "Z161"), ("z161", "Z161"), ("Zona 161", "Z161"), ("zona161", "Z161"),
     ("Z 161", "Z161"), ("Z-161", "Z161"), ("ZE161", "Z161"), ("161ª", "Z161"), (" 059 ", "Z59"), ("Polo", "POLO"),
+    # sem validação: o resto vai como digitado (em maiúsculas, sem ";"), o ASIdoBem confere
+    ("abc", "ABC"), ("1 61", "1 61"), ("Zona 1000", "ZONA 1000"), ("a;b", "A B"), ("", ""),
 ])
-def test_zona_aceita_grafias_comuns(app, zona, esperado):
+def test_zona_nunca_e_recusada(app, zona, esperado):
     lendo(app)
     p = app.page
     p.select_option("#select-operacao", "TRANSFERIR")
@@ -238,14 +225,3 @@ def test_zona_aceita_grafias_comuns(app, zona, esperado):
     app.enfileirar([App.det_qr("51000001")])
     app.esperar_fila()
     assert app.itens() == [["51000001", "TRANSFERIR:" + esperado]]
-
-
-@pytest.mark.parametrize("zona", ["0", "Z0", "1000", "1 61", "Zona 16 1", "X161", "161 POLO", "PO"])
-def test_zona_recusa_o_que_nao_e_zona(app, zona):
-    lendo(app)
-    p = app.page
-    p.select_option("#select-operacao", "TRANSFERIR")
-    p.fill("#input-zona", zona)
-    app.enfileirar([App.det_qr("51000001")])
-    app.esperar_fila()
-    assert app.itens() == []

@@ -55,13 +55,13 @@ def test_valores_diferentes_com_problema_tocam_cada_um(app):
     assert tons(app) == [180, 180]
 
 
-def test_zona_invalida_toca_erro(app):
+def test_zona_qualquer_toca_sucesso(app):
     lendo(app)
     app.page.select_option("#select-operacao", "TRANSFERIR")
     app.page.fill("#input-zona", "xx")
     app.enfileirar([App.det_qr("51000001")])
     app.esperar_fila()
-    assert tons(app) == [180]
+    assert tons(app) == [880, 1320]
 
 
 def test_sem_ideq_e_codigo_de_barras_sao_silenciosos(app):

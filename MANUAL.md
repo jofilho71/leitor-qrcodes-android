@@ -20,7 +20,7 @@ Para quem lê as urnas em campo. Sem termos técnicos.
    - **Dia novo:** no primeiro **Iniciar** de outro dia o app mostra o código guardado e pede para
      confirmar ou digitar outro (a coleta pode ter terminado e o código ter sido encerrado).
 3. Escolha a **ação**:
-   - **Transferir** — a urna vai para outra zona (digite o número, ex.: 161; "Z161" e "Zona 161" também valem) ou
+   - **Transferir** — a urna vai para outra zona (digite o número, ex.: 161; o app não confere a zona, quem confere é o ASIdoBem) ou
      para o polo (digite POLO).
    - **Emprestar** — a urna foi emprestada.
    - **Status** — escolha **Laudo**, **Defeito** ou **Pronta**. A urna não muda de lugar. (Laudo e Defeito
