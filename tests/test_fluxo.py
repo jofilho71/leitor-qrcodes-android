@@ -67,7 +67,7 @@ def test_operacoes_oferecidas(app):
     app.page.fill("#input-codigo", "48213")
     app.page.click("#btn-codigo-ok")
     valores = app.page.eval_on_selector_all("#select-operacao option", "o => o.map(x => x.value)")
-    assert valores == ["TRANSFERIR", "EMPRESTAR", "STATUS"]
+    assert valores == ["TRANSFERIR", "EMPRESTAR", "STATUS", "LEITURA"]
     app.page.select_option("#select-operacao", "STATUS")
     status = app.page.eval_on_selector_all("#select-status option", "o => o.map(x => x.textContent)")
     assert status == ["Laudo", "Defeito", "Pronta"]

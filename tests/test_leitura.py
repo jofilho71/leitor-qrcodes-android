@@ -241,3 +241,48 @@ def test_zona_vazia_recusa_e_preencher_aceita_a_mesma_urna(app, zona):
     app.enfileirar([App.det_qr("51000001")])
     app.esperar_fila()
     assert app.itens() == [["51000001", "TRANSFERIR:Z161"]]
+
+
+def test_leitura_so_tem_a_observacao(app):
+    app.abrir()
+    app.page.click("#btn-iniciar")
+    app.page.fill("#input-codigo", "48213")
+    app.page.click("#btn-codigo-ok")
+    p = app.page
+    p.select_option("#select-operacao", "LEITURA")
+    assert not p.is_visible("#input-zona") and not p.is_visible("#select-status")
+    assert p.is_visible("#texto-livre")
+    assert p.get_attribute("#texto-livre", "placeholder") == "Observação (opcional)"
+    p.select_option("#select-operacao", "STATUS")
+    assert p.get_attribute("#texto-livre", "placeholder") == "Nota (opcional)"
+
+
+def test_leitura_grava_operacao_sem_parametro_e_a_observacao(app):
+    lendo(app, operacao="LEITURA")
+    p = app.page
+    p.fill("#texto-livre", "lacre 123 rompido; conferir")
+    app.enfileirar([App.det_qr("51000001")])
+    app.esperar_fila()
+    p.fill("#texto-livre", "")
+    app.enfileirar([App.det_qr("51000002")])
+    app.esperar_fila()
+    assert app.itens() == [["51000001", "LEITURA"], ["51000002", "LEITURA"]]
+    dados = app.baixar_csv().strip().split("\n")[2:]
+    assert dados == [
+        "51000001;LEITURA;lacre 123 rompido conferir",
+        "51000002;LEITURA;",
+    ]
+
+
+def test_leitura_mistura_com_outras_operacoes_na_mesma_lista(app):
+    lendo(app, operacao="LEITURA")
+    p = app.page
+    p.fill("#texto-livre", "só olhei")
+    app.enfileirar([App.det_qr("51000001")])
+    app.esperar_fila()
+    p.select_option("#select-operacao", "EMPRESTAR")
+    p.fill("#texto-livre", "Maria")
+    app.enfileirar([App.det_qr("51000002")])
+    app.esperar_fila()
+    dados = app.baixar_csv().strip().split("\n")[2:]
+    assert dados == ["51000001;LEITURA;só olhei", "51000002;EMPRESTAR;Maria"]

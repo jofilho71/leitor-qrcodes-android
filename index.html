@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.4.2)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -205,6 +205,7 @@
           <option value="TRANSFERIR">Transferir</option>
           <option value="EMPRESTAR">Emprestar</option>
           <option value="STATUS">Status</option>
+          <option value="LEITURA">Leitura</option>
         </select>
         <input type="text" id="input-zona" maxlength="20" placeholder="Zona (ex.: 161) ou POLO" autocomplete="off" hidden>
         <select id="select-status" hidden>
@@ -441,6 +442,8 @@
   function atualizarCamposOperacao() {
     inputZona.hidden = selectOperacao.value !== "TRANSFERIR";
     selectStatus.hidden = selectOperacao.value !== "STATUS";
+    // Leitura só tem a observação: o campo de nota é o único parâmetro dela
+    textoLivre.placeholder = selectOperacao.value === "LEITURA" ? "Observação (opcional)" : "Nota (opcional)";
   }
   selectOperacao.addEventListener("change", atualizarCamposOperacao);
   inputZona.addEventListener("input", () => inputZona.classList.remove("invalido"));
