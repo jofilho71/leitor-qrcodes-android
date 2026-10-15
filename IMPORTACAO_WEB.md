@@ -11,10 +11,18 @@ recusa. Como o ASIdoBem implementa o lado dele está em
 **Situação.** O lado do ASIdoBem está **implementado** (Movimentar › Listas).
 Este é o **formato 1**. Qualquer mudança é combinada entre os projetos e entra
 numa nova versão do formato (seção 8) — nunca por conta própria de um dos lados.
+O "site" hoje é o **leitor de QR Codes** (v1.2), que publica em
+`https://raw.githubusercontent.com/jofilho71/asidobem-listas/main/indice.csv`
+(o endereço padrão do ASIdoBem, sem token); o vocabulário da seção 3.4 é o que ele emite.
 
 ---
 
 ## 1. O princípio
+
+> **Nota para o site:** o ASIdoBem trata a lista como uma *sugestão*: o operador pode corrigir, antes de aplicar,
+> a operação, o destino, o status, o tomador e a descrição de qualquer linha (o patrimônio, nunca). Não há mudança
+> de formato: o arquivo continua o mesmo, e o que o site mandou fica guardado no histórico. Mande o que foi coletado,
+> mesmo impreciso; não tente "adivinhar" nomes completos ou destinos.
 
 > **A lista diz o quê e com qual patrimônio. O ASIdoBem decide de onde, confere, planeja e grava.**
 
@@ -25,14 +33,14 @@ regras que o site **não precisa** (e não deve tentar) reproduzir:
 
 - uma urna só sai de onde ela está no cadastro do ASIdoBem — por isso a lista
   **não informa a origem**; o ASIdoBem a tira do próprio cadastro;
-- urna ainda não cadastrada só entra vinda de fora (pelo TRE);
+- urna ainda não cadastrada é recusada (o cadastro de urnas novas não vem por lista);
 - a gravação é **tudo ou nada**.
 
 Uma lista **nunca grava movimentação sozinha**. No ASIdoBem ela é baixada,
 conferida linha a linha e, quando o operador manda aplicar, as movimentações
 viram **planos** com os patrimônios — que ele ainda pode editar e só depois
-confirma como transação. (A troca de status, operação de cadastro, é aplicada
-na hora em que o operador aplica a lista.)
+confirma como transação. (A troca de status e o empréstimo valem na hora em que
+o operador aplica a lista; o empréstimo não move a urna.)
 
 ## 2. O código de 5 dígitos
 
@@ -69,13 +77,13 @@ Arquivo de texto **CSV**: uma linha de **identificação**, o **cabeçalho** e u
 linha por patrimônio.
 
 ```
-#ASIDOBEM;formato=1;codigo=48213;id=2026-10-20-z59-01;titulo=Coleta pós-eleição Zona 59;local=Z59;responsavel=Maria S.;gerado_em=2026-10-20T16:42:05-03:00
+#ASIDOBEM;formato=1;codigo=48213;id=2026-10-20-48213-01;titulo=Inventário 20/10;gerado_em=2026-10-20T16:42:05-03:00
 patrimonio;operacao;descricao
-51250523;RECOLHER;Coletada no cartório após a eleição
-51251189;RECOLHER;
-51253188;STATUS:Defeituosa;Não liga — tela apagada
-51254114;TRANSFERIR:Z59;Reposição de urna defeituosa
-51260164;CADASTRAR;Urna nova, lote 2026 do TRE
+51250523;TRANSFERIR:Z59;Reposição de urna defeituosa
+51251189;TRANSFERIR:POLO;
+51253188;STATUS:Defeituosa;LAUDO - tela apagada
+51254114;STATUS:Pronta;
+51260164;EMPRESTAR;Maria Souza
 ```
 
 ### 3.1 A linha de identificação
@@ -87,10 +95,10 @@ Primeira linha do arquivo, começando com `#ASIDOBEM;`, seguida de pares
 |---|---|---|
 | `formato` | sim | `1` |
 | `codigo` | sim | O código de 5 dígitos informado no site (seção 2) |
-| `id` | sim | Identificador **único e imutável** da lista: letras, números e `-`, até 60. Sugestão: `aaaa-mm-dd-<local>-<seq>` |
+| `id` | sim | Identificador **único e imutável** da lista: letras, números e `-`, até 60. O leitor usa `aaaa-mm-dd-<codigo>-<seq 2 dígitos>` |
 | `titulo` | não | Uma linha que o operador lê para reconhecer a lista (até 80 caracteres) |
-| `local` | não | Onde a coleta foi feita: `POLO` ou `Z<número da zona>`. Informativo — **não** é a origem |
-| `responsavel` | não | Quem fez a coleta (nome curto) |
+| `local` | não | Onde a coleta foi feita: `POLO` ou `Z<número da zona>`. Informativo — **não** é a origem. O leitor v1.2 **não envia** |
+| `responsavel` | não | Quem fez a coleta (nome curto). O leitor v1.2 **não envia** |
 | `gerado_em` | não | Data e hora da publicação, ISO 8601 com fuso |
 
 Os valores não podem conter `;` nem quebra de linha.
@@ -127,42 +135,45 @@ Os valores não podem conter `;` nem quebra de linha.
 ### 3.4 `operacao` — vocabulário fechado
 
 Uma palavra em **MAIÚSCULAS, sem acento**, às vezes com um parâmetro depois de
-`:` (sem espaços). **Só estas seis existem**; qualquer outra é recusada.
+`:` (sem espaços). **Só estas existem**; qualquer outra (inclusive as antigas
+`RECOLHER`, `DEVOLVER_TRE`, `DESCARTAR` e `CADASTRAR`) é recusada como "fora do vocabulário".
 
 | Operação | O que pede | O que o ASIdoBem faz |
 |---|---|---|
-| `RECOLHER` | A urna volta ao polo | Plano **do local onde ela está para o polo**, com o patrimônio. Aparece também no **Retorno ao polo** daquela zona |
-| `TRANSFERIR:<destino>` | A urna vai para outro local | Plano do local onde ela está para `<destino>` |
-| `DEVOLVER_TRE` | A urna sai para o TRE | Plano do local onde ela está para o local virtual **TRE** |
-| `DESCARTAR` | A urna foi sucateada/baixada | Plano do local onde ela está para o local virtual **Descarte** |
-| `STATUS:<status>` | Mudou a condição da urna | Troca do status no cadastro, com registro no histórico da urna; **não move** a urna |
-| `CADASTRAR` | Urna nova, ainda desconhecida | Plano de **entrada** TRE → polo; a urna é criada quando o plano for confirmado |
+| `TRANSFERIR:<destino>` | A urna vai para outro local | **Plano** pendente do local onde ela está para `<destino>` (a origem vem do cadastro, nunca do arquivo) |
+| `STATUS:<status>` | Mudou a condição da urna | Troca do status no cadastro, **na hora de aplicar**, com registro no histórico da urna; **não move** a urna |
+| `LEITURA` | A urna foi apenas lida; a `descricao` é a observação do técnico (relação, questão técnica, lacre…) | **Nada**: não move, não troca status, não empresta. A linha aparece na conferência e vai no CSV baixado. Urna não cadastrada é só um aviso. Lista só de `LEITURA` pode ser "aplicada" (fica registrada como tratada) |
+| `EMPRESTAR` | A urna foi emprestada | **Empréstimo** criado na hora de aplicar, com a data do dia; a urna **não muda de local**. O tomador é a `descricao`, editável na tela de importação; sem tomador, a linha é recusada. Se a urna **já estiver emprestada**, a mesma linha vira **devolução** ao tomador original, com a data de hoje (editável e desmarcável na tela de importação); a `descricao` não é exigida e, se for diferente do tomador, gera aviso |
 
-**`<destino>`** em `TRANSFERIR`: `POLO` (prefira `RECOLHER`) ou `Z<número da
-zona>` — pelo número da zona, não pelo município: `Z59`, `Z146` (`Z059` =
-`Z59`). `TRANSFERIR:TRE` e `TRANSFERIR:DESCARTE` são recusados: use
-`DEVOLVER_TRE` e `DESCARTAR`.
+**`<destino>`** em `TRANSFERIR`: `POLO` ou `Z<número da zona>` — pelo número da
+zona, não pelo município: `Z59`, `Z146` (`Z059` = `Z59`). Qualquer outro destino
+(`TRE`, `DESCARTE`…) é recusado.
 
 **`<status>`** em `STATUS`, um destes (o ASIdoBem não diferencia maiúsculas e
 acentos, mas publique assim):
 
 ```
-Pronta · Defeituosa · Danificada · Sucateada · Nao Certificada · Sem Bateria · Indisponivel
+Pronta · Defeituosa
 ```
 
-`STATUS:Pronta` diz que a urna foi consertada.
+`STATUS:Pronta` diz que a urna foi consertada. **Laudo** e **Defeito** chegam
+como `STATUS:Defeituosa`; o laudo leva `LAUDO` (ou `LAUDO - <nota>`) na `descricao`.
+Os demais status do cadastro não vêm por lista.
+
+`EMPRESTAR` e `LEITURA` não levam parâmetro (`EMPRESTAR:Maria` e `LEITURA:x` são recusados). Não há operação de
+devolução: `EMPRESTAR` de urna que já está emprestada é tratada como devolução (leitor v1.3).
 
 Fora do vocabulário, de propósito: **itens sem patrimônio** (cabos, baterias,
-cabines — quantidades continuam lançadas no ASIdoBem), **empréstimos** (não
-movem material e o tomador não tem cadastro) e **origem** (seção 1).
+cabines — quantidades continuam lançadas no ASIdoBem) e **origem** (seção 1).
 
 ### 3.5 `descricao`
 
 Texto livre, opcional, **até 200 caracteres**, sem `;` e sem quebra de linha.
 É o que o coletor quer registrar: defeito, quem entregou, lacre. No ASIdoBem:
 
-- nas movimentações, as descrições vão para a **observação** do plano gerado;
-- em `STATUS`, é acrescentada ao **complemento** do cadastro da urna.
+- nas transferências, as descrições vão para a **observação** do plano gerado;
+- em `STATUS`, é acrescentada ao **complemento** do cadastro da urna;
+- em `EMPRESTAR`, é o **tomador** do empréstimo.
 
 Não coloque dados pessoais além do necessário (nome de quem entregou basta;
 CPF e telefone não).
@@ -180,8 +191,8 @@ Endereço configurado no ASIdoBem (botão **Site…**), por exemplo
 
 ```
 id;codigo;gerado_em;titulo;linhas;sha256;arquivo
-2026-10-20-z59-01;48213;2026-10-20T16:42:05-03:00;Coleta pós-eleição Zona 59;262;9f2c…e1;listas/2026-10-20-z59-01.csv
-2026-10-21-polo-01;48213;2026-10-21T09:10:00-03:00;Urnas novas do TRE;40;41aa…07;listas/2026-10-21-polo-01.csv
+2026-10-21-48213-02;48213;2026-10-21T09:10:00-03:00;Inventário 21/10;40;41aa…07;listas/2026-10-21-48213-02.csv
+2026-10-20-48213-01;48213;2026-10-20T16:42:05-03:00;Inventário 20/10;262;9f2c…e1;listas/2026-10-20-48213-01.csv
 ```
 
 | Coluna | Conteúdo |
@@ -244,15 +255,17 @@ Cada linha sai como **válida**, **com aviso** (segue; o operador vê) ou
 | Linha com outra quantidade de colunas | Recusada |
 | Patrimônio vazio ou com algo além de dígitos | Recusada |
 | Patrimônio repetido na lista | Recusadas todas as ocorrências |
-| Operação fora do vocabulário, ou parâmetro inválido | Recusada |
+| Operação ou status fora do vocabulário, ou parâmetro inválido | Recusada |
 | Descrição com mais de 200 caracteres | Recusada |
 | Zona de destino que não existe no cadastro | Recusada |
-| `CADASTRAR` de patrimônio já cadastrado | Recusada (diz onde ele está) |
-| Outra operação com patrimônio não cadastrado | Recusada |
-| Movimentação para o local onde a urna já está | Recusada |
+| Patrimônio não cadastrado | Recusada |
+| Transferência para o local onde a urna já está | Recusada |
+| `EMPRESTAR` sem tomador | Recusada ("sem tomador"); preencher a coluna Tomador na tela libera a linha |
+| `EMPRESTAR` de urna em local virtual | Recusada (a edição do tomador não resolve) |
+| `EMPRESTAR` de urna já emprestada | **Devolução** ao tomador original (aviso se a `descricao` for diferente do tomador); o usuário pode desmarcá-la |
 | Patrimônio com tamanho diferente de 8 | Aviso |
 | `STATUS` igual ao status atual | Aviso (nada a mudar) |
-| Urna em empréstimo aberto | Aviso |
+| `TRANSFERIR` ou `STATUS` de urna em empréstimo aberto | Aviso |
 
 ## 6. Lista de verificação do site
 
@@ -260,7 +273,7 @@ Cada linha sai como **válida**, **com aviso** (segue; o operador vê) ou
 - [ ] Gera o CSV por programa, em UTF-8, com `;`, identificação e cabeçalho exatos
 - [ ] Patrimônio guardado e escrito como **texto**, só dígitos, zeros preservados
 - [ ] Um patrimônio por lista; conflitos resolvidos antes de publicar
-- [ ] Operações só do vocabulário da seção 3.4, em maiúsculas; zona por número (`Z59`)
+- [ ] Operações só do vocabulário da seção 3.4, em maiúsculas; zona por número (`Z59`); `EMPRESTAR` com o tomador na descrição
 - [ ] Descrição até 200 caracteres, sem `;` nem quebra de linha
 - [ ] `id` único e nunca reutilizado; lista imutável depois de publicada
 - [ ] SHA-256 calculado sobre os bytes exatos do arquivo publicado
@@ -271,33 +284,45 @@ Cada linha sai como **válida**, **com aviso** (segue; o operador vê) ou
 ## 7. Casos de teste
 
 Com o código `48213` aberto no ASIdoBem, a urna `51250523` na Zona 59 e
-Pronta, `51251189` no polo e `51269999` não cadastrada:
+Pronta, `51251189` no polo, `51253188` no polo e `51269999` não cadastrada:
 
 ```
 #ASIDOBEM;formato=1;codigo=48213;id=teste-01;titulo=Casos de teste
 patrimonio;operacao;descricao
-51250523;RECOLHER;Coleta pós-eleição
+51250523;TRANSFERIR:POLO;Coleta pós-eleição
 51251189;TRANSFERIR:Z59;
-51269999;CADASTRAR;Urna nova, lote 2026
-51251189;STATUS:Defeituosa;Repetida: recusada
-051250523;RECOLHER;9 dígitos: aviso de tamanho, e recusada por não cadastrada
-5125O523;RECOLHER;Letra O no lugar do zero: recusada
-51250524;Recolher;Operação em minúsculas: recusada
-51250525;TRANSFERIR:Z999;Zona inexistente: recusada
-51250526;STATUS:Quebrada;Status fora da lista: recusada
-51250527;TRANSFERIR:TRE;Use DEVOLVER_TRE: recusada
+51253188;STATUS:Defeituosa;LAUDO
+51250524;EMPRESTAR;Maria Souza
+51250525;EMPRESTAR;
+51250526;RECOLHER;Fora do vocabulário: recusada
+51251189;STATUS:Pronta;Repetida: recusada
+051250523;TRANSFERIR:POLO;9 dígitos: aviso de tamanho, e recusada por não cadastrada
+5125O523;TRANSFERIR:POLO;Letra O no lugar do zero: recusada
+51250527;Transferir:POLO;Operação em minúsculas: recusada
+51250528;TRANSFERIR:Z999;Zona inexistente: recusada
+51250529;STATUS:Quebrada;Status fora da lista: recusada
+51250530;TRANSFERIR:TRE;Destino fora do vocabulário: recusada
+51269999;EMPRESTAR;Urna não cadastrada: recusada
 ```
 
-Resultado esperado: válidas só a 1ª linha de dados (`51250523`, RECOLHER) e a
-3ª (`51269999`, CADASTRAR). A `51251189` aparece duas vezes, então **as duas**
-são recusadas. As demais são recusadas pelos motivos da própria descrição.
+Se uma urna da lista já estiver emprestada (por exemplo `51250524` com Maria Souza),
+a linha `EMPRESTAR` dela é uma **devolução** a Maria Souza, não um empréstimo novo.
+
+Resultado esperado: válidas a 1ª (`51250523`), a 3ª (`51253188`) e a 4ª
+(`51250524`, se estiver cadastrada e livre). A `51251189` aparece duas vezes,
+então **as duas** são recusadas; o `EMPRESTAR` sem tomador (`51250525`) também
+é recusado, mas passa a valer se o tomador for preenchido na tela. As demais são
+recusadas pelos motivos da própria descrição.
 Trocando o código por um que o ASIdoBem não gerou, a lista inteira é ignorada.
 
 ## 8. Versões do formato
 
 Este é o **formato 1**. Muda de versão qualquer coisa que um leitor do formato
 1 interpretaria errado: chave obrigatória nova, coluna nova, operação nova,
-parâmetro novo, outra codificação. A mudança é combinada entre os projetos; o
+parâmetro novo, outra codificação. (Exceção combinada, 2026-10-11: ao adotar o
+leitor v1.2 o vocabulário foi redefinido — saem `RECOLHER`, `DEVOLVER_TRE`,
+`DESCARTAR`, `CADASTRAR` e os status além de Pronta/Defeituosa; entra `EMPRESTAR` —
+sem mudar o número do formato, porque não havia listas em circulação. Terceira exceção combinada, 2026-10-15: leitor **v1.5** e ASIdoBem **0.10.0** — entra `LEITURA` (só observação, sem efeito no cadastro); o número do formato não muda porque um ASIdoBem anterior recusa a linha como "fora do vocabulário", sem gravar nada errado, e o ASIdoBem é atualizado antes de o leitor passar a emitir. Segunda exceção combinada, 2026-10-12: leitor **v1.3** — `EMPRESTAR` de urna já emprestada passa a ser devolução; o formato do arquivo e o número do formato não mudam, só o efeito.) A mudança é combinada entre os projetos; o
 site passa a publicar `formato=2`, e o ASIdoBem só lê as listas de uma versão
 depois de atualizado para ela. Chaves **opcionais** novas na identificação não
 mudam a versão: o ASIdoBem ignora as que não conhece.

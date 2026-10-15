@@ -72,11 +72,17 @@ enquanto o QR continuar à vista (`bloqueioCamera`).
 
 ## Operações e CSV (formato 1)
 
-Operações do app: `TRANSFERIR:Z<n>|POLO`, `EMPRESTAR`, `STATUS:<status>`. Na tela o status é Laudo/Defeito/Pronta, mas o
+Operações do app: `TRANSFERIR:Z<n>|POLO`, `EMPRESTAR`, `STATUS:<status>` e `LEITURA`. Na tela o status é Laudo/Defeito/Pronta, mas o
 valor gravado é o oficial do ASIdoBem: **Defeito → `STATUS:Defeituosa`**, **Laudo → `STATUS:Defeituosa` com a
 descrição `LAUDO`** (ou `LAUDO - <nota>`), Pronta → `STATUS:Pronta` (`STATUS_OFICIAL`, `descricaoAtual`).
 
-**Decisão do usuário (2026-10-11)**: o leitor só emite essas três operações; toda operação do leitor entra no
+**`LEITURA`** (decisão do usuário, 2026-10-15, leitor v 1.5 / ASIdoBem 0.10.0): só lê os patrimônios e leva uma
+observação (o campo de nota, com o rótulo "Observação"); **não muda nada no cadastro**. Serve para relações e questões técnicas
+que não envolvem movimentar a urna. Sem parâmetro (`LEITURA:x` o ASIdoBem recusa). O ASIdoBem mostra a linha, deixa corrigir a
+observação e permite baixar o CSV de qualquer lista. **Ordem de entrega**: o ASIdoBem 0.10.0 precisa estar em uso antes de o
+leitor v 1.5 ir ao ar (um ASIdoBem anterior só recusa a linha como "fora do vocabulário", sem gravar nada errado).
+
+**Decisão do usuário (2026-10-11)**: o leitor emite só estas operações (as três primeiras, até a v 1.4.x); toda operação do leitor entra no
 ASIdoBem como **plano** (depois efetivado). `EMPRESTAR` não consta do contrato original (`IMPORTACAO_WEB.md`): o
 pedido de mudança ao ASIdoBem está em `docs/INTEGRACAO_ASIDOBEM.md` (§5). O índice não valida o vocabulário.
 

@@ -86,6 +86,7 @@ Decisões já tomadas, sem necessidade de nova consulta:
 | Status → Pronta | `STATUS:Pronta` | nota livre | já existe |
 | Status → Defeito | `STATUS:Defeituosa` | nota livre | já existe |
 | Status → Laudo | `STATUS:Defeituosa` | `LAUDO` ou `LAUDO - <nota>` | já existe (a marca vai na descrição) |
+| Leitura (v 1.5) | `LEITURA` (sem parâmetro) | observação livre | **nova** (ASIdoBem 0.10.0): só registra, sem efeito no cadastro |
 
 `descricao`: ≤ 200 caracteres, `;`/quebra de linha viram espaço.
 

@@ -23,6 +23,9 @@ Para quem lê as urnas em campo. Sem termos técnicos.
    - **Transferir** — a urna vai para outra zona (digite o número, ex.: 161; o campo não pode ficar vazio; quem confere a zona é o ASIdoBem) ou
      para o polo (digite POLO).
    - **Emprestar** — a urna foi emprestada.
+   - **Leitura** — só ler as urnas, sem mudar nada no ASIdoBem. Use o campo de **observação** para anotar
+     o que for preciso (uma relação, um lacre, uma questão técnica). O ASIdoBem mostra a lista e permite
+     baixá-la em planilha (CSV).
    - **Status** — escolha **Laudo**, **Defeito** ou **Pronta**. A urna não muda de lugar. (Laudo e Defeito
      registram a urna como defeituosa; o Laudo acrescenta a marca "LAUDO" na descrição.)
    - Se quiser, escreva uma nota (defeito, lacre…). A operação e a nota valem para as próximas leituras
