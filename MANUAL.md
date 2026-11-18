@@ -32,8 +32,8 @@ Para quem lê as urnas em campo. Sem termos técnicos.
      até você mudar.
 4. Toque em **Começar leitura** e no botão da **câmera**. Aponte para o QR da urna (o QR do TSE ao lado do
    código de barras). Só o QR é lido.
-   Se a câmera não ler sozinha (QR pequeno ou denso), com a câmera aberta toque em **Capturar**: o app tira uma
-   foto em alta resolução e lê o QR dela. Centralize o QR e espere o foco antes de tocar.
+   Se a câmera não ler sozinha (QR pequeno ou denso), toque em **Foto**: abre a câmera do celular; tire a foto
+   do QR (centralizado e nítido) e confirme. O app lê o QR da foto, como na galeria.
 5. Cada leitura boa faz **dois bipes agudos** e a tela mostra "Item incluído". Um **bipe grave** é problema:
    QR que não é de patrimônio válido ou **urna já lida nesta lista**.
 6. Errou? **Excluir último** (seta) tira o último item da lista; pode tocar várias vezes. Para ler a mesma urna de novo depois de excluí-la, afaste a câmera do QR por
@@ -59,5 +59,5 @@ Para quem lê as urnas em campo. Sem termos técnicos.
 - **O app fechou ou a tela recarregou no meio da leitura**: abra de novo e toque em **Retomar**.
 - **Bipe grave numa urna que você não leu ainda**: confira se o QR é o certo e se não está cortado ou
   desfocado; leia de novo com mais luz.
-- **A câmera abre e não lê**: aproxime até o QR ficar nítido e use o botão **Capturar**.
+- **A câmera abre e não lê**: aproxime até o QR ficar nítido e use o botão **Foto**.
 - **A câmera não liga**: veja se o Chrome tem permissão de câmera.

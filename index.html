@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.6)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.7)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -229,10 +229,11 @@
         </span>
       </button>
 
-      <button class="btn-icone" id="btn-capturar" type="button" title="Capturar foto" style="display:none;width:auto;padding:0 14px;gap:6px">
+      <label class="btn-icone" for="input-camera-sistema" id="btn-foto" title="Foto pela câmera do celular" style="width:auto;padding:0 14px;gap:6px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg>
-        <span>Capturar</span>
-      </button>
+        <span>Foto</span>
+      </label>
+      <input type="file" id="input-camera-sistema" accept="image/*" capture="environment">
     </div>
 
     <div class="pendencia" id="pendencia"></div>
@@ -308,8 +309,8 @@
   const textoLivre = $("texto-livre");
   const inputFotos = $("input-fotos");
   const btnGaleria = $("btn-galeria");
+  const inputCameraSistema = $("input-camera-sistema");
   const btnCamera = $("btn-camera");
-  const btnCapturar = $("btn-capturar");
   const iconeCamera = $("icone-camera");
   const pendenciaEl = $("pendencia");
   const cameraWrap = $("camera-wrap");
@@ -852,8 +853,9 @@
     return [];
   }
 
-  inputFotos.addEventListener("change", async (ev) => {
-    const arquivos = Array.from(ev.target.files || []);
+  async function aoEscolherFotos(ev) {
+    const entrada = ev.target;
+    const arquivos = Array.from(entrada.files || []);
     if (!arquivos.length) return;
     pararCamera();
     statusBar.style.display = "block";
@@ -878,9 +880,13 @@
 
     statusTexto.textContent = `${processados} processada(s)`;
     setTimeout(() => { statusBar.style.display = "none"; }, 1500);
-    inputFotos.value = "";
+    entrada.value = "";
     if (falhas) mostrarErroTemporario(`Nenhum código encontrado em ${falhas} foto(s).`);
-  });
+  }
+  inputFotos.addEventListener("change", aoEscolherFotos);
+  // "Foto": abre o app de câmera do celular (lente principal, autofoco, alta resolução) e a foto
+  // segue o mesmo caminho da galeria. O vídeo do navegador pode usar uma lente de foco fixo.
+  inputCameraSistema.addEventListener("change", aoEscolherFotos);
 
   // ================= CÂMERA =================
   const VIDEO_BASE = { width: { ideal: 1920 }, height: { ideal: 1080 } };
@@ -945,7 +951,6 @@
     }
     cameraWrap.style.display = "block";
     document.body.classList.add("camera-ativa");
-    btnCapturar.style.display = "inline-flex";
     btnCamera.classList.add("ativo");
     iconeCamera.innerHTML = ICONE_PARAR;
     btnGaleria.style.opacity = ".5";
@@ -988,7 +993,7 @@
     };
 
     const tick = async () => {
-      if (!streamAtivo || capturando) return; // durante a captura o canvas é da captura
+      if (!streamAtivo) return;
       if (video.readyState < 2) { mostrarDiag(); return; }
       est.quadros++;
       let codigos = [];
@@ -1048,59 +1053,10 @@
     $("diag-camera").style.display = "none";
     cameraWrap.style.display = "none";
     document.body.classList.remove("camera-ativa");
-    btnCapturar.style.display = "none";
     btnCamera.classList.remove("ativo");
     iconeCamera.innerHTML = ICONE_CAMERA;
     btnGaleria.style.opacity = "";
     btnGaleria.style.pointerEvents = "";
-  }
-
-  // Capturar: foto em alta resolução (com autofoco) da câmera aberta, lida pelo mesmo caminho da
-  // galeria. O vídeo ao vivo (1080x1920) não resolve o QR denso da urna; a foto, sim.
-  let capturando = false;
-  btnCapturar.addEventListener("click", async () => {
-    if (capturando || !streamAtivo) return;
-    capturando = true;
-    btnCapturar.disabled = true;
-    try {
-      const trilha = streamAtivo.getVideoTracks()[0];
-      let blob = null;
-      if ("ImageCapture" in window) {
-        const ic = new window.ImageCapture(trilha);
-        try { blob = await ic.takePhoto(); }
-        catch (e) { /* sem takePhoto: cai para o quadro do vídeo */ }
-      }
-      let codigos = [];
-      if (blob) {
-        const img = await carregarImagem(blob);
-        codigos = await detectarCodigosEmImagem(img);
-      } else {
-        codigos = await lerQuadroComJsQRFora();
-      }
-      if (!codigos.length) mostrarErroTemporario("Nenhum QR na foto. Aproxime, centralize e tente de novo.");
-      for (const codigo of codigos) processarCodigoDetectado(codigo, "galeria");
-    } catch (e) {
-      mostrarErroTemporario("Falha ao capturar: " + ((e && (e.message || e.name)) || "erro"));
-    } finally {
-      capturando = false;
-      btnCapturar.disabled = false;
-    }
-  });
-  // reserva (sem ImageCapture): usa o quadro atual do vídeo
-  async function lerQuadroComJsQRFora() {
-    const w = video.videoWidth, h = video.videoHeight;
-    if (!w || !h) return [];
-    canvas.width = w; canvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
-    try {
-      if ("BarcodeDetector" in window) {
-        const det = obterDetectorNativo();
-        const br = det ? await det.detect(canvas) : [];
-        if (br && br.length) return br.map(c => ({ rawValue: c.rawValue, format: c.format }));
-      }
-    } catch (e) { /* tenta jsQR */ }
-    await garantirJsQR();
-    return decodificarCanvasComJsQR(w, h);
   }
 
   btnCamera.addEventListener("click", () => { prepararAudio(); if (streamAtivo) pararCamera(); else iniciarCamera(); });
