@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.2)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.3)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -882,7 +882,8 @@
     recente.clear();
     try {
       streamAtivo = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } }, audio: false
+        // sem pedir resolução, alguns aparelhos entregam 480x640, pouco para o QR da urna
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false
       });
     } catch (e) {
       erroCamera.textContent = "Câmera indisponível: " + (e.message || e.name || "permissão negada.");
@@ -890,6 +891,14 @@
       return;
     }
     video.srcObject = streamAtivo;
+    try {
+      // foco contínuo, onde o aparelho oferece (QR pequeno, de perto)
+      const trilha = streamAtivo.getVideoTracks()[0];
+      const caps = trilha && trilha.getCapabilities ? trilha.getCapabilities() : {};
+      if (caps.focusMode && caps.focusMode.indexOf("continuous") >= 0) {
+        await trilha.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+      }
+    } catch (e) { /* foco é só um reforço */ }
     try {
       await video.play();
     } catch (e) {
