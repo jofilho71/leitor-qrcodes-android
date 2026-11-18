@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.5)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.6)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -227,6 +227,11 @@
         <span id="icone-camera">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8a2 2 0 0 1 2-2h1.2a1 1 0 0 0 .9-.55L8.7 4.1A1 1 0 0 1 9.6 3.5h4.8a1 1 0 0 1 .9.6l.6 1.35a1 1 0 0 0 .9.55H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.3"/></svg>
         </span>
+      </button>
+
+      <button class="btn-icone" id="btn-capturar" type="button" title="Capturar foto" style="display:none;width:auto;padding:0 14px;gap:6px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg>
+        <span>Capturar</span>
       </button>
     </div>
 
@@ -304,6 +309,7 @@
   const inputFotos = $("input-fotos");
   const btnGaleria = $("btn-galeria");
   const btnCamera = $("btn-camera");
+  const btnCapturar = $("btn-capturar");
   const iconeCamera = $("icone-camera");
   const pendenciaEl = $("pendencia");
   const cameraWrap = $("camera-wrap");
@@ -939,6 +945,7 @@
     }
     cameraWrap.style.display = "block";
     document.body.classList.add("camera-ativa");
+    btnCapturar.style.display = "inline-flex";
     btnCamera.classList.add("ativo");
     iconeCamera.innerHTML = ICONE_PARAR;
     btnGaleria.style.opacity = ".5";
@@ -981,7 +988,7 @@
     };
 
     const tick = async () => {
-      if (!streamAtivo) return;
+      if (!streamAtivo || capturando) return; // durante a captura o canvas é da captura
       if (video.readyState < 2) { mostrarDiag(); return; }
       est.quadros++;
       let codigos = [];
@@ -1041,10 +1048,59 @@
     $("diag-camera").style.display = "none";
     cameraWrap.style.display = "none";
     document.body.classList.remove("camera-ativa");
+    btnCapturar.style.display = "none";
     btnCamera.classList.remove("ativo");
     iconeCamera.innerHTML = ICONE_CAMERA;
     btnGaleria.style.opacity = "";
     btnGaleria.style.pointerEvents = "";
+  }
+
+  // Capturar: foto em alta resolução (com autofoco) da câmera aberta, lida pelo mesmo caminho da
+  // galeria. O vídeo ao vivo (1080x1920) não resolve o QR denso da urna; a foto, sim.
+  let capturando = false;
+  btnCapturar.addEventListener("click", async () => {
+    if (capturando || !streamAtivo) return;
+    capturando = true;
+    btnCapturar.disabled = true;
+    try {
+      const trilha = streamAtivo.getVideoTracks()[0];
+      let blob = null;
+      if ("ImageCapture" in window) {
+        const ic = new window.ImageCapture(trilha);
+        try { blob = await ic.takePhoto(); }
+        catch (e) { /* sem takePhoto: cai para o quadro do vídeo */ }
+      }
+      let codigos = [];
+      if (blob) {
+        const img = await carregarImagem(blob);
+        codigos = await detectarCodigosEmImagem(img);
+      } else {
+        codigos = await lerQuadroComJsQRFora();
+      }
+      if (!codigos.length) mostrarErroTemporario("Nenhum QR na foto. Aproxime, centralize e tente de novo.");
+      for (const codigo of codigos) processarCodigoDetectado(codigo, "galeria");
+    } catch (e) {
+      mostrarErroTemporario("Falha ao capturar: " + ((e && (e.message || e.name)) || "erro"));
+    } finally {
+      capturando = false;
+      btnCapturar.disabled = false;
+    }
+  });
+  // reserva (sem ImageCapture): usa o quadro atual do vídeo
+  async function lerQuadroComJsQRFora() {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (!w || !h) return [];
+    canvas.width = w; canvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+    try {
+      if ("BarcodeDetector" in window) {
+        const det = obterDetectorNativo();
+        const br = det ? await det.detect(canvas) : [];
+        if (br && br.length) return br.map(c => ({ rawValue: c.rawValue, format: c.format }));
+      }
+    } catch (e) { /* tenta jsQR */ }
+    await garantirJsQR();
+    return decodificarCanvasComJsQR(w, h);
   }
 
   btnCamera.addEventListener("click", () => { prepararAudio(); if (streamAtivo) pararCamera(); else iniciarCamera(); });
