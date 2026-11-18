@@ -34,6 +34,8 @@ navigator.mediaDevices.getUserMedia = async () => {
   c.getContext('2d').fillRect(0, 0, 320, 240);
   return c.captureStream(15);
 };
+navigator.mediaDevices.enumerateDevices = async () => [];
+window.jsQR = () => null;
 navigator.vibrate = (p) => { window.__vibracoes.push(p); return true; };
 window.AudioContext = class {
   constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }

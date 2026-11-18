@@ -117,7 +117,17 @@ que não passar. Sessão com 0 itens não é salva. Todo acesso a `localStorage`
 - **Fallback**: `jsQR` via CDN (só QR — e só QR é o que o app quer). `garantirJsQR()` não guarda promise
   rejeitada em cache. Na **câmera**, o jsQR também
   entra quando o nativo lança erro (passa a ser o único) ou fica sem resultado (confere a cada 3 quadros); se nem
-  ele carrega, avisa na tela. Antes, erro do nativo era engolido e a câmera ficava muda (aparelho novo, 2026-11-18). A decodificação via jsQR está centralizada em `decodificarCanvasComJsQR(w, h)`.
+  ele carrega, avisa na tela. Antes, erro do nativo era engolido e a câmera ficava muda (aparelho novo, 2026-11-18).
+  **Lente (2026-11-18, v 1.6):** em celular com várias lentes traseiras o `facingMode: environment` pode abrir uma de foco
+  fixo (ex.: "camera 2" num Samsung), onde o QR denso do adesivo não é lido ao vivo — a causa do caso do aparelho novo. O botão
+  **Lente** passa de uma traseira a outra e guarda o `deviceId` em `lq.lente`;
+  a galeria continua como reserva.
+  **Robustez da câmera (revisão da v 1.6):** cada abertura tem uma *geração* (`geracaoCamera`); `pararCamera()` a invalida e a
+  abertura em andamento (vários `await`) desiste e solta o stream que já abriu. `tick` roda um por vez (`ocupado`). O nativo só é
+  descartado após 3 erros seguidos; a cada 3 quadros vazios o jsQR confere o quadro (e o nativo, uma cópia dele). O aviso "indisponível"
+  só sai quando o jsQR é a única esperança (sem nativo). Falha do CDN do jsQR dá pausa de 15 s antes de nova tentativa. A câmera
+  desliga com o app em segundo plano e avisa se a trilha termina (outro app tomou a câmera). `lq.lente` só é apagada se a lente
+  não existe mais (`OverconstrainedError`/`NotFoundError`). A sessão guardada só vale com operação do vocabulário (`RE_OPERACAO`). O vídeo é pedido em 1920x1080 com foco contínuo. A decodificação via jsQR está centralizada em `decodificarCanvasComJsQR(w, h)`.
 - `BarcodeDetector` depende de Google Play Services no Android; não existe em Chromium headless (por isso os
   testes fazem stub).
 

@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.8)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.6)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -229,12 +229,6 @@
         </span>
       </button>
 
-      <label class="btn-icone" for="input-camera-sistema" id="btn-foto" title="Foto pela câmera do celular" style="width:auto;padding:0 14px;gap:6px">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg>
-        <span>Foto</span>
-      </label>
-      <input type="file" id="input-camera-sistema" accept="image/*" capture="environment">
-
       <button class="btn-icone" id="btn-lente" type="button" title="Trocar a lente da câmera" style="display:none;width:auto;padding:0 14px;gap:6px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.7M20 4v4.7h-4.7M20 12a8 8 0 0 1-13.7 5.6L4 15.3M4 20v-4.7h4.7"/></svg>
         <span>Lente</span>
@@ -249,7 +243,6 @@
     </div>
 
     <div class="erro-camera" id="erro-camera"></div>
-    <div id="diag-camera" style="display:none;font:11px/1.4 monospace;color:#9aa0a6;padding:4px 12px;word-break:break-all"></div>
 
     <div class="status-bar" id="status-bar">
       <span id="status-texto">Processando…</span>
@@ -314,7 +307,6 @@
   const textoLivre = $("texto-livre");
   const inputFotos = $("input-fotos");
   const btnGaleria = $("btn-galeria");
-  const inputCameraSistema = $("input-camera-sistema");
   const btnLente = $("btn-lente");
   const btnCamera = $("btn-camera");
   const iconeCamera = $("icone-camera");
@@ -368,6 +360,7 @@
   let sessao = null;            // {codigo, itens: [{codigo, operacao, descricao}]}
   let codigosVistos = new Set(); // patrimônios já aceitos nesta sessão (único dedup do app)
   let jsQRCarregado = null;
+  let falhaJsQREm = 0;
   let streamAtivo = null;
   let intervaloId = null;
   let timerEstadoVisual = null;
@@ -789,11 +782,13 @@
   function garantirJsQR() {
     if (window.jsQR) return Promise.resolve();
     if (jsQRCarregado) return jsQRCarregado;
+    // após uma falha, espera 15 s antes de tentar de novo (evita uma <script> e uma requisição por quadro)
+    if (Date.now() - falhaJsQREm < 15000) return Promise.reject(new Error("sem conexão para carregar biblioteca de apoio"));
     jsQRCarregado = new Promise((resolve, reject) => {
       const s = document.createElement("script");
       s.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
       s.onload = () => resolve();
-      s.onerror = () => reject(new Error("sem conexão para carregar biblioteca de apoio"));
+      s.onerror = () => { s.remove(); falhaJsQREm = Date.now(); reject(new Error("sem conexão para carregar biblioteca de apoio")); };
       document.head.appendChild(s);
     });
     // se falhar (rede indisponível no momento), não guarda a rejeição em cache — senão uma
@@ -851,7 +846,8 @@
     try {
       await garantirJsQR();
       for (const escala of [1, 0.5, 1.5]) {
-        const { w, h } = desenharEmCanvas(img, escala);
+        const fator = Math.min(escala, (1600 / Math.max(img.naturalWidth, img.naturalHeight)) * escala || escala);
+        const { w, h } = desenharEmCanvas(img, fator);
         const codigos = decodificarCanvasComJsQR(w, h);
         if (codigos.length) return codigos;
       }
@@ -890,9 +886,6 @@
     if (falhas) mostrarErroTemporario(`Nenhum código encontrado em ${falhas} foto(s).`);
   }
   inputFotos.addEventListener("change", aoEscolherFotos);
-  // "Foto": abre o app de câmera do celular (lente principal, autofoco, alta resolução) e a foto
-  // segue o mesmo caminho da galeria. O vídeo do navegador pode usar uma lente de foco fixo.
-  inputCameraSistema.addEventListener("change", aoEscolherFotos);
 
   // ================= CÂMERA =================
   const VIDEO_BASE = { width: { ideal: 1920 }, height: { ideal: 1080 } };
@@ -901,109 +894,134 @@
     const caps = t && t.getCapabilities ? t.getCapabilities() : null;
     return !!(caps && caps.focusMode && caps.focusMode.indexOf("continuous") >= 0);
   }
+  function pararFaixas(stream) { if (stream) stream.getTracks().forEach(t => t.stop()); }
   async function preferirLenteComAutofoco(stream) {
     if (temAutofoco(stream)) return stream;
     const atual = stream.getVideoTracks()[0].getSettings().deviceId;
-    const lista = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput" && d.deviceId !== atual);
-    // as traseiras primeiro; frontal só se não houver outra
-    lista.sort((a, b) => (/front|frontal/i.test(a.label) ? 1 : 0) - (/front|frontal/i.test(b.label) ? 1 : 0));
+    const lista = (await navigator.mediaDevices.enumerateDevices())
+      .filter(d => d.kind === "videoinput" && d.deviceId !== atual && !/front|frontal/i.test(d.label));
     for (const d of lista) {
-      if (/front|frontal/i.test(d.label)) continue;
       let alt = null;
       try {
         alt = await navigator.mediaDevices.getUserMedia({ video: Object.assign({ deviceId: { exact: d.deviceId } }, VIDEO_BASE), audio: false });
       } catch (e) { continue; }
-      if (temAutofoco(alt)) { stream.getTracks().forEach(t => t.stop()); return alt; }
-      alt.getTracks().forEach(t => t.stop());
+      let serve = false;
+      try { serve = temAutofoco(alt); } catch (e) { /* trata como sem autofoco */ }
+      if (serve) { pararFaixas(stream); return alt; }
+      pararFaixas(alt);
     }
     return stream;
   }
+
+  // Cada abertura tem uma "geração": pararCamera() a invalida, e a abertura em andamento (que tem
+  // vários await) desiste e solta o que já abriu — sem stream órfão com a câmera ligada.
+  let geracaoCamera = 0;
+  let cameraIniciando = false;
+
   async function iniciarCamera() {
+    const minha = ++geracaoCamera;
+    const cancelada = (stream) => {
+      if (minha === geracaoCamera) return false;
+      pararFaixas(stream);
+      return true;
+    };
+    cameraIniciando = true;
     erroCamera.style.display = "none";
     recente.clear();
-    const lenteEscolhida = LS.ler("lq.lente");
     try {
-      streamAtivo = null;
-      if (lenteEscolhida) {
-        try {
-          streamAtivo = await navigator.mediaDevices.getUserMedia({
-            video: Object.assign({ deviceId: { exact: lenteEscolhida } }, VIDEO_BASE), audio: false
+      const lenteEscolhida = LS.ler("lq.lente");
+      let stream = null;
+      let usouGuardada = false;
+      try {
+        if (lenteEscolhida) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: Object.assign({ deviceId: { exact: lenteEscolhida } }, VIDEO_BASE), audio: false
+            });
+            usouGuardada = true;
+          } catch (e) {
+            // só apaga a lente guardada se ela não existe mais; câmera ocupada/permissão é passageiro
+            if (e && (e.name === "OverconstrainedError" || e.name === "NotFoundError")) LS.apagar("lq.lente");
+          }
+          if (cancelada(stream)) return;
+        }
+        if (!stream) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: Object.assign({ facingMode: { ideal: "environment" } }, VIDEO_BASE), audio: false
           });
-        } catch (e) { LS.apagar("lq.lente"); /* lente sumiu: volta ao padrão */ }
+          if (cancelada(stream)) return;
+          if (lenteEscolhida) mostrarErroTemporario("A lente escolhida não abriu; usando a padrão.");
+        }
+      } catch (e) {
+        if (minha !== geracaoCamera) return;
+        erroCamera.textContent = "Câmera indisponível: " + (e.message || e.name || "permissão negada.");
+        erroCamera.style.display = "block";
+        return;
       }
-      if (!streamAtivo) {
-        streamAtivo = await navigator.mediaDevices.getUserMedia({
-          // sem pedir resolução, alguns aparelhos entregam 480x640, pouco para o QR da urna
-          video: Object.assign({ facingMode: { ideal: "environment" } }, VIDEO_BASE), audio: false
-        });
+      // celulares com várias lentes traseiras: "environment" pode escolher a de foco fixo
+      // (ultra-grande-angular/macro), onde o QR não fica nítido; procura a que tem autofoco
+      if (!usouGuardada) {
+        try { stream = await preferirLenteComAutofoco(stream); } catch (e) { /* segue com a que abriu */ }
+        if (cancelada(stream)) return;
       }
-    } catch (e) {
-      erroCamera.textContent = "Câmera indisponível: " + (e.message || e.name || "permissão negada.");
-      erroCamera.style.display = "block";
-      return;
+      video.srcObject = stream;
+      try {
+        // foco contínuo, onde o aparelho oferece (QR pequeno, de perto)
+        const trilha = stream.getVideoTracks()[0];
+        const caps = trilha && trilha.getCapabilities ? trilha.getCapabilities() : {};
+        if (caps.focusMode && caps.focusMode.indexOf("continuous") >= 0) {
+          await trilha.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+        }
+      } catch (e) { /* foco é só um reforço */ }
+      if (cancelada(stream)) return;
+      try {
+        await video.play();
+      } catch (e) {
+        // sem isso, um play() rejeitado (ex.: restrição de autoplay em WebView) deixava a UI
+        // da câmera "ativa" com o vídeo congelado, sem detectar nada e sem aviso nenhum
+        pararFaixas(stream);
+        if (minha !== geracaoCamera) return; // parada pelo usuário no meio (AbortError)
+        video.srcObject = null;
+        erroCamera.textContent = "Câmera indisponível: falha ao iniciar o vídeo (" + (e.message || e.name || "erro desconhecido") + ").";
+        erroCamera.style.display = "block";
+        return;
+      }
+      if (cancelada(stream)) return;
+      streamAtivo = stream;
+      // outro app tomou a câmera (ou o sistema a retirou): avisa, em vez de deixar o vídeo congelado
+      stream.getVideoTracks()[0].addEventListener("ended", () => {
+        if (streamAtivo !== stream) return;
+        pararCamera();
+        mostrarErroTemporario("A câmera foi interrompida. Toque na câmera para ligar de novo.", 8000);
+      });
+      cameraWrap.style.display = "block";
+      document.body.classList.add("camera-ativa");
+      btnLente.style.display = "inline-flex";
+      btnCamera.classList.add("ativo");
+      iconeCamera.innerHTML = ICONE_PARAR;
+      btnGaleria.style.opacity = ".5";
+      btnGaleria.style.pointerEvents = "none";
+      atualizarEstadoVisual();
+      iniciarLeituraCamera(minha);
+    } finally {
+      if (minha === geracaoCamera) cameraIniciando = false;
     }
-    // celulares com várias lentes traseiras: "environment" pode escolher a de foco fixo
-    // (ultra-grande-angular/macro), onde o QR não fica nítido; procura a que tem autofoco
-    try { if (!lenteEscolhida) streamAtivo = await preferirLenteComAutofoco(streamAtivo); } catch (e) { /* segue com a que abriu */ }
-    video.srcObject = streamAtivo;
-    try {
-      // foco contínuo, onde o aparelho oferece (QR pequeno, de perto)
-      const trilha = streamAtivo.getVideoTracks()[0];
-      const caps = trilha && trilha.getCapabilities ? trilha.getCapabilities() : {};
-      if (caps.focusMode && caps.focusMode.indexOf("continuous") >= 0) {
-        await trilha.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
-      }
-    } catch (e) { /* foco é só um reforço */ }
-    try {
-      await video.play();
-    } catch (e) {
-      // sem isso, um play() rejeitado (ex.: restrição de autoplay em WebView) deixava a UI
-      // da câmera "ativa" com o vídeo congelado, sem detectar nada e sem aviso nenhum
-      streamAtivo.getTracks().forEach(t => t.stop());
-      streamAtivo = null;
-      video.srcObject = null;
-      erroCamera.textContent = "Câmera indisponível: falha ao iniciar o vídeo (" + (e.message || e.name || "erro desconhecido") + ").";
-      erroCamera.style.display = "block";
-      return;
-    }
-    cameraWrap.style.display = "block";
-    document.body.classList.add("camera-ativa");
-    btnLente.style.display = "inline-flex";
-    btnCamera.classList.add("ativo");
-    iconeCamera.innerHTML = ICONE_PARAR;
-    btnGaleria.style.opacity = ".5";
-    btnGaleria.style.pointerEvents = "none";
-    atualizarEstadoVisual();
+  }
 
+  function iniciarLeituraCamera(minha) {
     let detectorNativo = ("BarcodeDetector" in window) ? obterDetectorNativo() : null;
     let quadrosVazios = 0;
+    let errosNativo = 0;
     let avisouApoio = false;
-    const diag = $("diag-camera");
-    const est = { quadros: 0, nativoErro: "", jsqrErro: "", lidos: 0, ultimo: "", fonte: "", trilha: "" };
-    try {
-      const tr = streamAtivo.getVideoTracks()[0];
-      const st = tr.getSettings ? tr.getSettings() : {};
-      const cp = tr.getCapabilities ? tr.getCapabilities() : {};
-      est.trilha = "foco=" + (st.focusMode || "?") + " (aceita: " + ((cp.focusMode || []).join(",") || "?") + ")" +
-        " fps=" + (st.frameRate ? Math.round(st.frameRate) : "?") +
-        " zoom=" + (st.zoom || "-") + (cp.zoom ? " (máx " + cp.zoom.max + ")" : "") +
-        " cam=" + (tr.label || "?");
-    } catch (e) { est.trilha = "trilha?"; }
-    const mostrarDiag = () => {
-      diag.style.display = "block";
-      diag.textContent = "diag: " + (detectorNativo ? "nativo" : ("BarcodeDetector" in window ? "jsQR (nativo falhou: " + est.nativoErro + ")" : "jsQR (sem nativo)")) +
-        " | vídeo " + video.videoWidth + "x" + video.videoHeight + " rs=" + video.readyState +
-        " | quadros " + est.quadros + " | QR lidos " + est.lidos + (est.ultimo ? " (último: " + est.ultimo + ")" : "") +
-        (est.fonte ? " | leu por: " + est.fonte : "") +
-        (est.jsqrErro ? " | jsQR: " + est.jsqrErro : "") + " | " + est.trilha;
-    };
+    let quadros = 0;
+    let ocupado = false;
 
-    // jsQR sobre o quadro atual (reduzido a no máximo 1280 px de largura, para não pesar)
+    // jsQR sobre o quadro atual (reduzido a no máximo 1280 px no maior lado, para não pesar)
     const lerQuadroComJsQR = async () => {
       await garantirJsQR();
       const vw = video.videoWidth, vh = video.videoHeight;
       if (!vw || !vh) return [];
-      const f = Math.min(1, 1280 / vw);
+      const f = Math.min(1, 1280 / Math.max(vw, vh));
       const w = Math.round(vw * f), h = Math.round(vh * f);
       canvas.width = w; canvas.height = h;
       ctx.drawImage(video, 0, 0, w, h);
@@ -1011,64 +1029,62 @@
     };
 
     const tick = async () => {
-      if (!streamAtivo) return;
-      if (video.readyState < 2) { mostrarDiag(); return; }
-      est.quadros++;
-      let codigos = [];
-      if (detectorNativo) {
-        try {
-          const brutos = await detectorNativo.detect(video);
-          codigos = (brutos || []).map(c => ({ rawValue: c.rawValue, format: c.format }));
-          if (codigos.length) est.fonte = "nativo/vídeo";
-        } catch (e) {
-          // o detector nativo existe mas não funciona neste aparelho: passa ao jsQR de vez
-          est.nativoErro = (e && (e.name + ": " + e.message)) || "erro";
-          detectorNativo = null;
+      // um tick por vez: detect() e jsQR podem demorar mais que o intervalo
+      if (ocupado || minha !== geracaoCamera || !streamAtivo || video.readyState < 2) return;
+      ocupado = true;
+      try {
+        quadros++;
+        let codigos = [];
+        if (detectorNativo) {
+          try {
+            const brutos = await detectorNativo.detect(video);
+            codigos = (brutos || []).map(c => ({ rawValue: c.rawValue, format: c.format }));
+            errosNativo = 0;
+          } catch (e) {
+            // falha de um quadro passa; 3 seguidas = o nativo não funciona neste aparelho: jsQR de vez
+            if (++errosNativo >= 3) detectorNativo = null;
+          }
+          // nativo sem resultado: a cada 3 quadros confere também com o jsQR (o nativo pode
+          // não achar o QR no vídeo ao vivo mesmo achando-o na foto)
+          if (detectorNativo && !codigos.length && (++quadrosVazios % 3 !== 0)) return;
         }
-        // nativo sem resultado: a cada 3 quadros confere também com o jsQR (o nativo pode
-        // não achar o QR no vídeo ao vivo mesmo achando-o na foto)
-        if (detectorNativo && !codigos.length && (++quadrosVazios % 3 !== 0)) return;
-      }
-      if (!codigos.length && est.quadros % 3 === 0 && "BarcodeDetector" in window) {
-        // teste: o nativo sobre uma cópia do quadro (pode funcionar quando detect(video) não funciona)
-        try {
-          const vw = video.videoWidth, vh = video.videoHeight;
-          canvas.width = vw; canvas.height = vh;
-          ctx.drawImage(video, 0, 0, vw, vh);
-          const det = obterDetectorNativo();
-          const br = det ? await det.detect(canvas) : [];
-          codigos = (br || []).map(c => ({ rawValue: c.rawValue, format: c.format }));
-          if (codigos.length) est.fonte = "nativo/canvas";
-        } catch (e) { est.nativoErro = est.nativoErro || ("canvas: " + (e && e.message)); }
-      }
-      if (!codigos.length) {
-        try {
-          codigos = await lerQuadroComJsQR();
-          if (codigos.length) est.fonte = "jsQR";
-        } catch (e) {
-          est.jsqrErro = (e && e.message) || "erro";
-          if (!avisouApoio) {
-            avisouApoio = true;
-            mostrarErroTemporario("Leitura pela câmera indisponível neste aparelho: use fotos da galeria.", 8000);
+        if (!codigos.length && quadros % 3 === 0 && detectorNativo) {
+          // o nativo sobre uma cópia do quadro (pode funcionar quando detect(video) não funciona)
+          try {
+            const vw = video.videoWidth, vh = video.videoHeight;
+            canvas.width = vw; canvas.height = vh;
+            ctx.drawImage(video, 0, 0, vw, vh);
+            const br = await detectorNativo.detect(canvas);
+            codigos = (br || []).map(c => ({ rawValue: c.rawValue, format: c.format }));
+          } catch (e) { /* segue para o jsQR */ }
+        }
+        if (!codigos.length) {
+          try {
+            codigos = await lerQuadroComJsQR();
+          } catch (e) {
+            // só avisa se o jsQR é a única esperança; com o nativo funcionando, a falta de rede é irrelevante
+            if (!avisouApoio && !detectorNativo) {
+              avisouApoio = true;
+              mostrarErroTemporario("Leitura pela câmera indisponível neste aparelho ou sem conexão para carregar a biblioteca de apoio.", 8000);
+            }
           }
         }
+        if (minha !== geracaoCamera) return; // a câmera foi parada durante a leitura
+        for (const codigo of codigos) processarCodigoDetectado(codigo, "câmera");
+      } finally {
+        ocupado = false;
       }
-      for (const codigo of codigos) {
-        est.lidos++;
-        est.ultimo = String(codigo.rawValue || "").slice(0, 40);
-        processarCodigoDetectado(codigo, "câmera");
-      }
-      mostrarDiag();
     };
     intervaloId = setInterval(tick, INTERVALO_MS);
   }
 
   function pararCamera() {
+    geracaoCamera++;
+    cameraIniciando = false;
     if (intervaloId) clearInterval(intervaloId);
     intervaloId = null;
-    if (streamAtivo) { streamAtivo.getTracks().forEach(t => t.stop()); streamAtivo = null; }
+    if (streamAtivo) { pararFaixas(streamAtivo); streamAtivo = null; }
     video.srcObject = null;
-    $("diag-camera").style.display = "none";
     cameraWrap.style.display = "none";
     document.body.classList.remove("camera-ativa");
     btnLente.style.display = "none";
@@ -1078,11 +1094,16 @@
     btnGaleria.style.pointerEvents = "";
   }
 
+  // câmera não fica ligada com o app em segundo plano
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && (streamAtivo || cameraIniciando)) pararCamera();
+  });
+
   // Lente: celulares com várias lentes traseiras (principal, ultra-grande-angular, macro) —
   // o navegador pode abrir a de foco fixo. Cada toque passa à próxima traseira; a escolha fica guardada.
   let trocandoLente = false;
   btnLente.addEventListener("click", async () => {
-    if (trocandoLente || !streamAtivo) return;
+    if (trocandoLente || cameraIniciando || !streamAtivo) return;
     trocandoLente = true;
     try {
       const atual = streamAtivo.getVideoTracks()[0].getSettings().deviceId;
@@ -1098,7 +1119,7 @@
     } finally { trocandoLente = false; }
   });
 
-  btnCamera.addEventListener("click", () => { prepararAudio(); if (streamAtivo) pararCamera(); else iniciarCamera(); });
+  btnCamera.addEventListener("click", () => { prepararAudio(); if (streamAtivo || cameraIniciando) pararCamera(); else iniciarCamera(); });
   btnGaleria.addEventListener("click", prepararAudio);
 
   // ---------- excluir último / cancelar ----------
@@ -1138,12 +1159,14 @@
   }
 
   // o conteúdo salvo não é confiável (pode estar corrompido ou ter sido editado): valida a forma inteira
+  // a sessão guardada não é confiável: operação com ";" ou quebra de linha quebraria o CSV
+  const RE_OPERACAO = /^(TRANSFERIR:[^;\r\n]+|STATUS:(Pronta|Defeituosa)|EMPRESTAR|LEITURA)$/;
   function sessaoSalvaValida(s) {
     return !!s && typeof s === "object" && !Array.isArray(s) &&
       CODIGO_VALIDO.test(String(s.codigo)) &&
       Array.isArray(s.itens) && s.itens.length > 0 &&
       s.itens.every(it => it && /^\d{1,20}$/.test(String(it.codigo)) &&
-        typeof it.operacao === "string" && typeof it.descricao === "string");
+        typeof it.operacao === "string" && RE_OPERACAO.test(it.operacao) && typeof it.descricao === "string");
   }
 
   function prepararInicio() {
