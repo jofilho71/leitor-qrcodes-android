@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.4)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.5)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -877,19 +877,45 @@
   });
 
   // ================= CÂMERA =================
+  const VIDEO_BASE = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+  function temAutofoco(stream) {
+    const t = stream.getVideoTracks()[0];
+    const caps = t && t.getCapabilities ? t.getCapabilities() : null;
+    return !!(caps && caps.focusMode && caps.focusMode.indexOf("continuous") >= 0);
+  }
+  async function preferirLenteComAutofoco(stream) {
+    if (temAutofoco(stream)) return stream;
+    const atual = stream.getVideoTracks()[0].getSettings().deviceId;
+    const lista = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput" && d.deviceId !== atual);
+    // as traseiras primeiro; frontal só se não houver outra
+    lista.sort((a, b) => (/front|frontal/i.test(a.label) ? 1 : 0) - (/front|frontal/i.test(b.label) ? 1 : 0));
+    for (const d of lista) {
+      if (/front|frontal/i.test(d.label)) continue;
+      let alt = null;
+      try {
+        alt = await navigator.mediaDevices.getUserMedia({ video: Object.assign({ deviceId: { exact: d.deviceId } }, VIDEO_BASE), audio: false });
+      } catch (e) { continue; }
+      if (temAutofoco(alt)) { stream.getTracks().forEach(t => t.stop()); return alt; }
+      alt.getTracks().forEach(t => t.stop());
+    }
+    return stream;
+  }
   async function iniciarCamera() {
     erroCamera.style.display = "none";
     recente.clear();
     try {
       streamAtivo = await navigator.mediaDevices.getUserMedia({
         // sem pedir resolução, alguns aparelhos entregam 480x640, pouco para o QR da urna
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false
+        video: Object.assign({ facingMode: { ideal: "environment" } }, VIDEO_BASE), audio: false
       });
     } catch (e) {
       erroCamera.textContent = "Câmera indisponível: " + (e.message || e.name || "permissão negada.");
       erroCamera.style.display = "block";
       return;
     }
+    // celulares com várias lentes traseiras: "environment" pode escolher a de foco fixo
+    // (ultra-grande-angular/macro), onde o QR não fica nítido; procura a que tem autofoco
+    try { streamAtivo = await preferirLenteComAutofoco(streamAtivo); } catch (e) { /* segue com a que abriu */ }
     video.srcObject = streamAtivo;
     try {
       // foco contínuo, onde o aparelho oferece (QR pequeno, de perto)
