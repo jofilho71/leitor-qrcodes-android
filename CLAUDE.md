@@ -115,7 +115,9 @@ que não passar. Sessão com 0 itens não é salva. Todo acesso a `localStorage`
 
 - **Preferência**: `BarcodeDetector` nativo com `formats: ["qr_code"]`.
 - **Fallback**: `jsQR` via CDN (só QR — e só QR é o que o app quer). `garantirJsQR()` não guarda promise
-  rejeitada em cache. A decodificação via jsQR está centralizada em `decodificarCanvasComJsQR(w, h)`.
+  rejeitada em cache. Na **câmera**, o jsQR também
+  entra quando o nativo lança erro (passa a ser o único) ou fica sem resultado (confere a cada 3 quadros); se nem
+  ele carrega, avisa na tela. Antes, erro do nativo era engolido e a câmera ficava muda (aparelho novo, 2026-11-18). A decodificação via jsQR está centralizada em `decodificarCanvasComJsQR(w, h)`.
 - `BarcodeDetector` depende de Google Play Services no Android; não existe em Chromium headless (por isso os
   testes fazem stub).
 

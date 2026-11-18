@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.1)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -909,26 +909,48 @@
     btnGaleria.style.pointerEvents = "none";
     atualizarEstadoVisual();
 
-    const detectorNativo = ("BarcodeDetector" in window) ? obterDetectorNativo() : null;
+    let detectorNativo = ("BarcodeDetector" in window) ? obterDetectorNativo() : null;
+    let quadrosVazios = 0;
+    let avisouApoio = false;
+
+    // jsQR sobre o quadro atual (reduzido a no máximo 1280 px de largura, para não pesar)
+    const lerQuadroComJsQR = async () => {
+      await garantirJsQR();
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh) return [];
+      const f = Math.min(1, 1280 / vw);
+      const w = Math.round(vw * f), h = Math.round(vh * f);
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(video, 0, 0, w, h);
+      return decodificarCanvasComJsQR(w, h);
+    };
 
     const tick = async () => {
       if (!streamAtivo || video.readyState < 2) return;
-      try {
-        let codigos = [];
-        if (detectorNativo) {
+      let codigos = [];
+      if (detectorNativo) {
+        try {
           const brutos = await detectorNativo.detect(video);
           codigos = (brutos || []).map(c => ({ rawValue: c.rawValue, format: c.format }));
-        } else {
-          await garantirJsQR();
-          const w = video.videoWidth, h = video.videoHeight;
-          if (w && h) {
-            canvas.width = w; canvas.height = h;
-            ctx.drawImage(video, 0, 0, w, h);
-            codigos = decodificarCanvasComJsQR(w, h);
+        } catch (e) {
+          // o detector nativo existe mas não funciona neste aparelho: passa ao jsQR de vez
+          detectorNativo = null;
+        }
+        // nativo sem resultado: a cada 3 quadros confere também com o jsQR (o nativo pode
+        // não achar o QR no vídeo ao vivo mesmo achando-o na foto)
+        if (detectorNativo && !codigos.length && (++quadrosVazios % 3 !== 0)) return;
+      }
+      if (!codigos.length) {
+        try {
+          codigos = await lerQuadroComJsQR();
+        } catch (e) {
+          if (!avisouApoio) {
+            avisouApoio = true;
+            mostrarErroTemporario("Leitura pela câmera indisponível neste aparelho: use fotos da galeria.", 8000);
           }
         }
-        for (const codigo of codigos) processarCodigoDetectado(codigo, "câmera");
-      } catch (e) { /* ignora falha pontual de um frame */ }
+      }
+      for (const codigo of codigos) processarCodigoDetectado(codigo, "câmera");
     };
     intervaloId = setInterval(tick, INTERVALO_MS);
   }
