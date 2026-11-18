@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.3)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.4)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -923,13 +923,23 @@
     let quadrosVazios = 0;
     let avisouApoio = false;
     const diag = $("diag-camera");
-    const est = { quadros: 0, nativoErro: "", jsqrErro: "", lidos: 0, ultimo: "" };
+    const est = { quadros: 0, nativoErro: "", jsqrErro: "", lidos: 0, ultimo: "", fonte: "", trilha: "" };
+    try {
+      const tr = streamAtivo.getVideoTracks()[0];
+      const st = tr.getSettings ? tr.getSettings() : {};
+      const cp = tr.getCapabilities ? tr.getCapabilities() : {};
+      est.trilha = "foco=" + (st.focusMode || "?") + " (aceita: " + ((cp.focusMode || []).join(",") || "?") + ")" +
+        " fps=" + (st.frameRate ? Math.round(st.frameRate) : "?") +
+        " zoom=" + (st.zoom || "-") + (cp.zoom ? " (máx " + cp.zoom.max + ")" : "") +
+        " cam=" + (tr.label || "?");
+    } catch (e) { est.trilha = "trilha?"; }
     const mostrarDiag = () => {
       diag.style.display = "block";
       diag.textContent = "diag: " + (detectorNativo ? "nativo" : ("BarcodeDetector" in window ? "jsQR (nativo falhou: " + est.nativoErro + ")" : "jsQR (sem nativo)")) +
         " | vídeo " + video.videoWidth + "x" + video.videoHeight + " rs=" + video.readyState +
         " | quadros " + est.quadros + " | QR lidos " + est.lidos + (est.ultimo ? " (último: " + est.ultimo + ")" : "") +
-        (est.jsqrErro ? " | jsQR: " + est.jsqrErro : "");
+        (est.fonte ? " | leu por: " + est.fonte : "") +
+        (est.jsqrErro ? " | jsQR: " + est.jsqrErro : "") + " | " + est.trilha;
     };
 
     // jsQR sobre o quadro atual (reduzido a no máximo 1280 px de largura, para não pesar)
@@ -953,6 +963,7 @@
         try {
           const brutos = await detectorNativo.detect(video);
           codigos = (brutos || []).map(c => ({ rawValue: c.rawValue, format: c.format }));
+          if (codigos.length) est.fonte = "nativo/vídeo";
         } catch (e) {
           // o detector nativo existe mas não funciona neste aparelho: passa ao jsQR de vez
           est.nativoErro = (e && (e.name + ": " + e.message)) || "erro";
@@ -962,9 +973,22 @@
         // não achar o QR no vídeo ao vivo mesmo achando-o na foto)
         if (detectorNativo && !codigos.length && (++quadrosVazios % 3 !== 0)) return;
       }
+      if (!codigos.length && est.quadros % 3 === 0 && "BarcodeDetector" in window) {
+        // teste: o nativo sobre uma cópia do quadro (pode funcionar quando detect(video) não funciona)
+        try {
+          const vw = video.videoWidth, vh = video.videoHeight;
+          canvas.width = vw; canvas.height = vh;
+          ctx.drawImage(video, 0, 0, vw, vh);
+          const det = obterDetectorNativo();
+          const br = det ? await det.detect(canvas) : [];
+          codigos = (br || []).map(c => ({ rawValue: c.rawValue, format: c.format }));
+          if (codigos.length) est.fonte = "nativo/canvas";
+        } catch (e) { est.nativoErro = est.nativoErro || ("canvas: " + (e && e.message)); }
+      }
       if (!codigos.length) {
         try {
           codigos = await lerQuadroComJsQR();
+          if (codigos.length) est.fonte = "jsQR";
         } catch (e) {
           est.jsqrErro = (e && e.message) || "erro";
           if (!avisouApoio) {
