@@ -59,5 +59,6 @@ Para quem lê as urnas em campo. Sem termos técnicos.
 - **O app fechou ou a tela recarregou no meio da leitura**: abra de novo e toque em **Retomar**.
 - **Bipe grave numa urna que você não leu ainda**: confira se o QR é o certo e se não está cortado ou
   desfocado; leia de novo com mais luz.
-- **A câmera abre e não lê**: aproxime até o QR ficar nítido e use o botão **Foto**.
+- **A câmera abre e não lê**: toque em **Lente** (aparece com a câmera aberta) para trocar de lente até o QR ficar
+  nítido e ser lido; o app guarda a escolha. Se nenhuma lente servir, use o botão **Foto**.
 - **A câmera não liga**: veja se o Chrome tem permissão de câmera.

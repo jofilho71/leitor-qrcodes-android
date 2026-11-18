@@ -157,7 +157,7 @@
 
 <header>
   <div class="topo-linha">
-    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.7)</span>
+    <span class="titulo-mini">Leitor PAT - Polo 24 (v 1.5.8)</span>
   </div>
   <div class="codigo-grande" id="codigo-grande" hidden></div>
 </header>
@@ -234,6 +234,11 @@
         <span>Foto</span>
       </label>
       <input type="file" id="input-camera-sistema" accept="image/*" capture="environment">
+
+      <button class="btn-icone" id="btn-lente" type="button" title="Trocar a lente da câmera" style="display:none;width:auto;padding:0 14px;gap:6px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.7M20 4v4.7h-4.7M20 12a8 8 0 0 1-13.7 5.6L4 15.3M4 20v-4.7h4.7"/></svg>
+        <span>Lente</span>
+      </button>
     </div>
 
     <div class="pendencia" id="pendencia"></div>
@@ -310,6 +315,7 @@
   const inputFotos = $("input-fotos");
   const btnGaleria = $("btn-galeria");
   const inputCameraSistema = $("input-camera-sistema");
+  const btnLente = $("btn-lente");
   const btnCamera = $("btn-camera");
   const iconeCamera = $("icone-camera");
   const pendenciaEl = $("pendencia");
@@ -915,11 +921,22 @@
   async function iniciarCamera() {
     erroCamera.style.display = "none";
     recente.clear();
+    const lenteEscolhida = LS.ler("lq.lente");
     try {
-      streamAtivo = await navigator.mediaDevices.getUserMedia({
-        // sem pedir resolução, alguns aparelhos entregam 480x640, pouco para o QR da urna
-        video: Object.assign({ facingMode: { ideal: "environment" } }, VIDEO_BASE), audio: false
-      });
+      streamAtivo = null;
+      if (lenteEscolhida) {
+        try {
+          streamAtivo = await navigator.mediaDevices.getUserMedia({
+            video: Object.assign({ deviceId: { exact: lenteEscolhida } }, VIDEO_BASE), audio: false
+          });
+        } catch (e) { LS.apagar("lq.lente"); /* lente sumiu: volta ao padrão */ }
+      }
+      if (!streamAtivo) {
+        streamAtivo = await navigator.mediaDevices.getUserMedia({
+          // sem pedir resolução, alguns aparelhos entregam 480x640, pouco para o QR da urna
+          video: Object.assign({ facingMode: { ideal: "environment" } }, VIDEO_BASE), audio: false
+        });
+      }
     } catch (e) {
       erroCamera.textContent = "Câmera indisponível: " + (e.message || e.name || "permissão negada.");
       erroCamera.style.display = "block";
@@ -927,7 +944,7 @@
     }
     // celulares com várias lentes traseiras: "environment" pode escolher a de foco fixo
     // (ultra-grande-angular/macro), onde o QR não fica nítido; procura a que tem autofoco
-    try { streamAtivo = await preferirLenteComAutofoco(streamAtivo); } catch (e) { /* segue com a que abriu */ }
+    try { if (!lenteEscolhida) streamAtivo = await preferirLenteComAutofoco(streamAtivo); } catch (e) { /* segue com a que abriu */ }
     video.srcObject = streamAtivo;
     try {
       // foco contínuo, onde o aparelho oferece (QR pequeno, de perto)
@@ -951,6 +968,7 @@
     }
     cameraWrap.style.display = "block";
     document.body.classList.add("camera-ativa");
+    btnLente.style.display = "inline-flex";
     btnCamera.classList.add("ativo");
     iconeCamera.innerHTML = ICONE_PARAR;
     btnGaleria.style.opacity = ".5";
@@ -1053,11 +1071,32 @@
     $("diag-camera").style.display = "none";
     cameraWrap.style.display = "none";
     document.body.classList.remove("camera-ativa");
+    btnLente.style.display = "none";
     btnCamera.classList.remove("ativo");
     iconeCamera.innerHTML = ICONE_CAMERA;
     btnGaleria.style.opacity = "";
     btnGaleria.style.pointerEvents = "";
   }
+
+  // Lente: celulares com várias lentes traseiras (principal, ultra-grande-angular, macro) —
+  // o navegador pode abrir a de foco fixo. Cada toque passa à próxima traseira; a escolha fica guardada.
+  let trocandoLente = false;
+  btnLente.addEventListener("click", async () => {
+    if (trocandoLente || !streamAtivo) return;
+    trocandoLente = true;
+    try {
+      const atual = streamAtivo.getVideoTracks()[0].getSettings().deviceId;
+      const lentes = (await navigator.mediaDevices.enumerateDevices())
+        .filter(d => d.kind === "videoinput" && !/front|frontal/i.test(d.label));
+      if (lentes.length < 2) { mostrarErroTemporario("Este aparelho só mostra uma lente ao navegador."); return; }
+      const i = lentes.findIndex(d => d.deviceId === atual);
+      LS.gravar("lq.lente", lentes[(i + 1) % lentes.length].deviceId);
+      pararCamera();
+      await iniciarCamera();
+    } catch (e) {
+      mostrarErroTemporario("Não foi possível trocar a lente: " + ((e && (e.message || e.name)) || "erro"));
+    } finally { trocandoLente = false; }
+  });
 
   btnCamera.addEventListener("click", () => { prepararAudio(); if (streamAtivo) pararCamera(); else iniciarCamera(); });
   btnGaleria.addEventListener("click", prepararAudio);
