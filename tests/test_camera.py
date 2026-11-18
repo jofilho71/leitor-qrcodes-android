@@ -24,38 +24,44 @@ LENTES = [
 ]
 
 
-def abrir(app):
+def abrir(app, atraso=0):
+    """Abre o app e inicia a leitura; a câmera liga sozinha (com `atraso` ms no getUserMedia)."""
     app.abrir()
     app.page.evaluate(CONTAR)
+    app.page.evaluate("a => { window.__atraso = a; }", atraso)
     app.iniciar()
 
 
 def test_botao_lente_so_aparece_com_a_camera_ligada(app):
     abrir(app)
-    assert not app.page.is_visible("#btn-lente")
     app.ligar_camera()
     assert app.page.is_visible("#btn-lente")
     app.page.click("#btn-camera")
     assert not app.page.is_visible("#btn-lente")
 
 
-def test_toque_duplo_em_camera_nao_deixa_trilha_viva(app):
+def test_comecar_leitura_liga_a_camera_sozinha(app):
     abrir(app)
-    app.page.evaluate("window.__atraso = 400")
+    app.page.wait_for_selector("body.camera-ativa")
+    assert app.page.evaluate("window.__vivas()") == 1
+
+
+def test_toque_duplo_em_camera_nao_deixa_trilha_viva(app):
+    abrir(app, atraso=400)
+    # a abertura automática ainda está em andamento: o 1º toque a cancela, o 2º abre outra
     app.page.click("#btn-camera")
-    app.page.click("#btn-camera")  # o segundo toque cancela a abertura em andamento
+    app.page.click("#btn-camera")
+    app.page.wait_for_selector("body.camera-ativa")
+    app.page.wait_for_timeout(1000)
+    assert app.page.evaluate("window.__vivas()") == 1  # nenhum stream órfão
+
+
+def test_parar_durante_a_abertura_nao_deixa_camera_ligada(app):
+    abrir(app, atraso=400)
+    app.page.click("#btn-camera")  # cancela a abertura em andamento
     app.page.wait_for_timeout(1500)
     assert app.page.evaluate("window.__vivas()") == 0
     assert not app.page.evaluate("document.body.classList.contains('camera-ativa')")
-
-
-def test_sair_da_leitura_durante_a_abertura_nao_deixa_camera_ligada(app):
-    abrir(app)
-    app.page.evaluate("window.__atraso = 400")
-    app.page.click("#btn-camera")
-    app.page.evaluate("document.getElementById('btn-camera').click()")  # parar antes de abrir
-    app.page.wait_for_timeout(1500)
-    assert app.page.evaluate("window.__vivas()") == 0
 
 
 def test_lente_cicla_so_entre_traseiras_e_guarda_a_escolha(app):
@@ -82,7 +88,7 @@ def test_lente_guardada_invalida_cai_no_padrao_e_apaga_a_chave(app):
         return g(c);
       };
     }""")
-    app.ligar_camera()
+    app.religar_camera()
     assert app.page.evaluate("localStorage.getItem('lq.lente')") is None
 
 
@@ -96,7 +102,7 @@ def test_lente_guardada_com_falha_passageira_nao_e_apagada(app):
         return g(c);
       };
     }""")
-    app.ligar_camera()
+    app.religar_camera()
     assert json.loads(app.page.evaluate("localStorage.getItem('lq.lente')")) == "t2"
 
 

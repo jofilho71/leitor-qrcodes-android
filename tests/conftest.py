@@ -176,6 +176,16 @@ class App:
         p.wait_for_selector("#tela-leitura:not([hidden])")
 
     def ligar_camera(self):
+        # "Começar leitura" já liga a câmera; só clica se ela não ligou sozinha
+        try:
+            self.page.wait_for_selector("body.camera-ativa", timeout=3000)
+        except Exception:
+            self.page.click("#btn-camera")
+            self.page.wait_for_selector("body.camera-ativa")
+
+    def religar_camera(self):
+        self.page.click("#btn-camera")
+        self.page.wait_for_function("!document.body.classList.contains('camera-ativa')")
         self.page.click("#btn-camera")
         self.page.wait_for_selector("body.camera-ativa")
 

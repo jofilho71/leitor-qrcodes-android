@@ -166,9 +166,8 @@ def test_lista_em_tela_segue_a_ordem_do_csv(app):
 
 def test_falha_de_getusermedia_mostra_erro_sem_camera_fantasma(app):
     app.abrir()
-    app.iniciar()
     app.page.evaluate("() => { navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error('negada')); }")
-    app.page.click("#btn-camera")
+    app.iniciar()  # a câmera tenta ligar sozinha ao começar a leitura
     app.page.wait_for_selector("#erro-camera", state="visible")
     assert "Câmera indisponível" in app.page.inner_text("#erro-camera")
     assert app.page.evaluate("document.body.classList.contains('camera-ativa')") is False
@@ -176,9 +175,8 @@ def test_falha_de_getusermedia_mostra_erro_sem_camera_fantasma(app):
 
 def test_falha_de_play_para_o_stream_e_mostra_erro(app):
     app.abrir()
-    app.iniciar()
     app.page.evaluate("() => { HTMLMediaElement.prototype.play = () => Promise.reject(new Error('bloqueado')); }")
-    app.page.click("#btn-camera")
+    app.iniciar()  # a câmera tenta ligar sozinha ao começar a leitura
     app.page.wait_for_selector("#erro-camera", state="visible")
     assert "falha ao iniciar o vídeo" in app.page.inner_text("#erro-camera")
     assert app.page.evaluate("document.body.classList.contains('camera-ativa')") is False

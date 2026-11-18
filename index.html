@@ -548,7 +548,9 @@
       return;
     }
     erroConfig.textContent = "";
+    prepararAudio();
     irPara("leitura");
+    iniciarCamera(); // a leitura já começa com a câmera ligada
   });
 
   // ---------- estado visual (borda da câmera + caixa de status) ----------

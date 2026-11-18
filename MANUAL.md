@@ -30,7 +30,7 @@ Para quem lê as urnas em campo. Sem termos técnicos.
      registram a urna como defeituosa; o Laudo acrescenta a marca "LAUDO" na descrição.)
    - Se quiser, escreva uma nota (defeito, lacre…). A operação e a nota valem para as próximas leituras
      até você mudar.
-4. Toque em **Começar leitura** e no botão da **câmera**. Aponte para o QR da urna (o QR do TSE ao lado do
+4. Toque em **Começar leitura**: a câmera já liga sozinha (o botão da **câmera** liga e desliga quando quiser). Aponte para o QR da urna (o QR do TSE ao lado do
    código de barras). Só o QR é lido.
    Se a câmera abrir e não ler, toque em **Lente** (veja Problemas).
 5. Cada leitura boa faz **dois bipes agudos** e a tela mostra "Item incluído". Um **bipe grave** é problema:
